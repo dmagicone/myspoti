@@ -194,7 +194,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      * Reloads the page, waits for it, then plays from [s]: the song after it ([next], a song
      * stuck at its end or an ad) or [s] itself where it was (a frozen page).
      */
-    private suspend fun reloadAndPlayOn(s: PlayerState?, next: Boolean = true) {
+    private suspend fun reloadAndPlayOn(s: PlayerState?, next: Boolean = true, fromAd: Boolean = false) {
         val reload = reloadHost ?: return
         if (recoveryHeld()) { bridge.logger?.invoke("reload held: a sign-in page is open or Spotify is limiting playback"); return }
         ownReload = true
@@ -203,7 +203,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                 reload()
                 withTimeoutOrNull(45_000) { delay(1_500); bridge.ready.first { it } } ?: return@runCatching
                 if (s == null) return@runCatching
-                if (next) { delay(1_500); playOn(s) } else resumeAfterReload(s)
+                if (next) { delay(1_500); playOn(s, fromAd) } else resumeAfterReload(s)
             }
         } finally {
             ownReload = false
@@ -454,11 +454,11 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                     val last = lastTrackState
                     if (adRecovery(adAttempts) == "next") {
                         bridge.logger?.invoke("ad stuck on ${ad?.item?.name}: playing the next song (attempt $adAttempts)")
-                        last?.let { runCatching { playOn(it) } }
+                        last?.let { runCatching { playOn(it, fromAd = true) } }
                     } else {
                         adReloaded = true
                         bridge.logger?.invoke("ad stuck on ${ad?.item?.name}: reloading the player (attempt $adAttempts)")
-                        if (reloadHost != null) reloadAndPlayOn(last) else last?.let { runCatching { playOn(it) } }
+                        if (reloadHost != null) reloadAndPlayOn(last, fromAd = true) else last?.let { runCatching { playOn(it, fromAd = true) } }
                     }
                     adSince = System.currentTimeMillis()
                 }
@@ -772,15 +772,30 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      * the user's own queue ([playNext]); with an empty user queue, `queue.add` does (the user queue
      * plays before the context).
      */
-    private suspend fun restoreAfterAd(a: app.myspoti.spotify.bridge.AdBlock.AdAhead, target: NowPlaying) {
-        val now = withTimeoutOrNull(AD_RESTORE_WAIT_MS) { _state.first { adSkipSettled(it?.item, a) }?.item }
+    private suspend fun restoreAfterAd(a: app.myspoti.spotify.bridge.AdBlock.AdAhead, target: NowPlaying) =
+        restoreSkippedTarget(target, a.songUid, a.songUri)
+
+    /**
+     * The put-back of [restoreAfterAd], for any skip to [target] the page answered by stepping
+     * onto the ad and on to the song after the target: waits for the song the page settles on
+     * (a real song other than [dueUri]/[dueUid], the one the ad was due after), then queues
+     * [target] first unless the page plays it itself.
+     */
+    private suspend fun restoreSkippedTarget(target: NowPlaying, dueUid: String?, dueUri: String?) {
+        val now = withTimeoutOrNull(AD_RESTORE_WAIT_MS) {
+            _state.first { st ->
+                val item = st?.item
+                item != null && (item.kind == ItemKind.TRACK || item.kind == ItemKind.EPISODE) &&
+                    !((dueUid != null && item.uid == dueUid) || item.uri == dueUri)
+            }?.item
+        }
         if (now != null && now.uri == target.uri) { bridge.logger?.invoke("skip past the ad: ${target.name} plays, nothing to put back"); return }
         runCatching { playNext(listOf(target.uri)) }
             .onSuccess { bridge.logger?.invoke("skip past the ad: ${target.name} put back to play next (page on ${now?.name ?: "nothing yet"})") }
             .onFailure { bridge.logger?.invoke("skip past the ad: ${target.name} not put back: ${it.message}") }
     }
 
-    private suspend fun playOn(s: PlayerState) {
+    private suspend fun playOn(s: PlayerState, fromAd: Boolean = false) {
         // The user skipped meanwhile: their song, not the one after the last state seen.
         if (playIntent()) return
         // Or picked one during the ad that is being got past: that one, in the order it was picked.
@@ -796,7 +811,19 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         // queued in the list: both go on within the queue the page has, as a skip would.
         val inQueue = target?.let { t -> upcoming().firstOrNull { it.uri == t } }
         if (inQueue != null && (s.shuffle || inQueue.provider == "queue") &&
-            runCatching { command("queue.skipTo", ref(inQueue), timeoutMs = PLAY_TIMEOUT_MS) }.isSuccess) return
+            runCatching { command("queue.skipTo", ref(inQueue), timeoutMs = PLAY_TIMEOUT_MS) }.isSuccess) {
+            // Getting past an ad: with an ad due in the page's machine the skip steps onto the
+            // ad and the page moves on by itself to the song AFTER the target, which is then
+            // never played (the same loss [skipPastAd] puts back after). The ad recovery went
+            // through this very skip without the put-back: on a shuffled list (this route) the
+            // song after every ad break was lost to the one after it. Put it back the same way.
+            if (fromAd || _adPlaying.value) {
+                adRestore?.cancel()
+                val due = s.item
+                adRestore = scope.launch { restoreSkippedTarget(inQueue, due?.uid, due?.uri) }
+            }
+            return
+        }
         when {
             ctx != null && target != null -> playNow(ctx, trackUri = target, order = lastOrder?.takeIf { it.first == ctx }?.second)
             target != null -> next()

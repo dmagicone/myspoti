@@ -49,6 +49,16 @@ android {
         buildConfig = true
     }
 
+    // Kotlin/Native compiler metadata shipped inside KMP jars is never read at
+    // Android runtime; ktor-client-core and okio both bundle
+    // 'nonJvmMain/default/linkdata/module', which mergeDebugJavaResource rejects
+    // as a duplicate without this exclude.
+    packaging {
+        resources {
+            excludes += "nonJvmMain/default/linkdata/module"
+        }
+    }
+
     // Release key from the CI secrets (env), else keystore/keystore.properties.
     val envStore = System.getenv("MYSPOTI_KEYSTORE")
     val hasReleaseKey = envStore != null || keystorePropertiesFile.exists()
@@ -72,7 +82,7 @@ android {
         debug {
             // Installs next to the release apps (own data, own sign-in).
             applicationIdSuffix = ".dev"
-            manifestPlaceholders["appLabel"] = "Myspoti dev"
+            manifestPlaceholders["appLabel"] = "Myspoti"
         }
         release {
             // Real key when provided (CI releases); otherwise the debug key, so a local
