@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/kota-zo/myspoti/releases/latest"><b>⬇ Download the latest APK</b></a>
+  <a href="https://github.com/dmagicone/myspoti/releases/latest"><b>⬇ Download the latest APK</b></a>
 </p>
 
 <p align="center">
