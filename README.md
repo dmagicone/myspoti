@@ -18,10 +18,7 @@
   <a href="https://github.com/dmagicone/myspoti/releases/latest"><b>⬇ Download the latest APK</b></a>
 </p>
 
-<p align="center">
-  <a href="https://ko-fi.com/kotazo"><img src="https://storage.ko-fi.com/cdn/kofi6.png?v=6" alt="Support Myspoti on Ko-fi" height="56"></a>
-  <a href="https://github.com/sponsors/kota-zo"><img src="https://img.shields.io/badge/Sponsor_on_GitHub-%E2%9D%A4-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor kota-zo on GitHub" height="56"></a>
-</p>
+
 
 ## Why Myspoti
 
