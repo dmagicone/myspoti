@@ -1,5 +1,10 @@
 package com.music.spotui.ui.components
 
+import com.music.spotui.ui.theme.AppDestructive
+import com.music.spotui.ui.theme.tone
+import com.music.spotui.ui.theme.AppText
+import com.music.spotui.ui.theme.AppMuted
+
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
@@ -113,6 +118,8 @@ fun PlaylistOptionsSheet(
     var renamingBlend by remember { mutableStateOf(false) }
     var leavingBlend by remember { mutableStateOf(false) }
     var leavingPlaylist by remember { mutableStateOf(false) }
+    var stoppingCollab by remember { mutableStateOf(false) }
+    var mergingInto by remember { mutableStateOf(false) }
     LaunchedEffect(page.uri, mine) {
         if (mine) {
             access = runCatching { MyspotiRuntime.api.playlists.access(page.uri) }.getOrNull()
@@ -141,7 +148,7 @@ fun PlaylistOptionsSheet(
         com.music.spotui.data.api.SpotifySync.setPlaylistPublished(page.uri, on) { ok -> if (!ok) restore() }
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF282828)) {
+    com.music.spotui.ui.components.LookSheet(onDismissRequest = onDismiss, containerColor = tone(0xFF282828)) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
             // As the official app: the playlist itself on top (cover, name, owner), then one action a row.
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(20.dp, 0.dp, 20.dp, 12.dp)) {
@@ -150,14 +157,16 @@ fun PlaylistOptionsSheet(
                     modifier = Modifier.size(52.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(4.dp)),
                 )
                 Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                    Text(page.name, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (page.ownerName.isNotBlank()) Text(stringResource(R.string.playlist_by, page.ownerName), color = Color(0xFFB3B3B3), fontSize = 13.sp,
+                    Text(page.name, color = AppText, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (page.ownerName.isNotBlank()) Text(stringResource(R.string.playlist_by, page.ownerName), color = AppMuted, fontSize = 13.sp,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
-            androidx.compose.material3.HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+            androidx.compose.material3.HorizontalDivider(color = AppText.copy(alpha = 0.08f))
             Spacer(Modifier.height(6.dp))
             val share = { SpotifyCode.show(ShareTarget(page.uri, page.name, page.ownerName, page.coverUri)); onDismiss() }
+            // Every song of this playlist into another one of yours (Web Player: "Add playlist to other playlist").
+            if (page.uri.startsWith("spotify:playlist:")) OptionRow(Icons.Outlined.AddCircleOutline, stringResource(R.string.add_playlist_to_playlist)) { mergingInto = true }
             if (page.isBlend) {
                 // A Blend is Spotify's: renamed, shared and left through its own service.
                 OptionRow(Icons.Outlined.Edit, stringResource(R.string.blend_rename)) { renamingBlend = true }
@@ -196,7 +205,7 @@ fun PlaylistOptionsSheet(
                 when (a) {
                     null -> OptionRow(Icons.Outlined.Lock, stringResource(R.string.playlist_access_title), enabled = false) {}
                     PlaylistAccess.PRIVATE -> OptionRow(Icons.Outlined.Public, stringResource(R.string.playlist_make_public)) { change(PlaylistAccess.PUBLIC, R.string.playlist_now_public) }
-                    PlaylistAccess.COLLABORATIVE -> OptionRow(Icons.Outlined.GroupRemove, stringResource(R.string.playlist_stop_collab)) { change(PlaylistAccess.PUBLIC, R.string.playlist_now_solo) }
+                    PlaylistAccess.COLLABORATIVE -> OptionRow(Icons.Outlined.GroupRemove, stringResource(R.string.playlist_stop_collab)) { stoppingCollab = true }
                     else -> OptionRow(Icons.Outlined.Lock, stringResource(R.string.playlist_make_private)) { change(PlaylistAccess.PRIVATE, R.string.playlist_now_private) }
                 }
                 // Only a playlist others may see can be listed on the profile.
@@ -219,8 +228,15 @@ fun PlaylistOptionsSheet(
                     onDismiss(); onProfile(page.ownerUri.substringAfterLast(':'))
                 }
             }
+            // Entries from extensions (menu.items), after the app's own.
+            com.music.spotui.extensions.ExtensionMenuEntries(
+                if (page.type == "album") app.myspoti.extensions.Surface.ALBUM_MENU else app.myspoti.extensions.Surface.PLAYLIST_MENU,
+                page.uri, page.name, page.ownerName, onDone = onDismiss,
+            )
         }
     }
+
+    if (mergingInto) AddCollectionToPlaylistSheet(page.uri, stringResource(R.string.add_playlist_to_playlist)) { mergingInto = false; onDismiss() }
 
     if (editing) EditDetailsDialog(page, onDismiss = { editing = false }) { name, description, cover ->
         editing = false
@@ -256,9 +272,9 @@ fun PlaylistOptionsSheet(
 
     if (leavingBlend) AlertDialog(
         onDismissRequest = { leavingBlend = false },
-        containerColor = Color(0xFF282828),
-        title = { Text(stringResource(R.string.blend_leave), color = Color.White) },
-        text = { Text(stringResource(R.string.blend_leave_confirm, page.name), color = Color(0xFFB3B3B3)) },
+        containerColor = tone(0xFF282828),
+        title = { Text(stringResource(R.string.blend_leave), color = AppText) },
+        text = { Text(stringResource(R.string.blend_leave_confirm, page.name), color = AppMuted) },
         confirmButton = {
             TextButton(onClick = {
                 leavingBlend = false
@@ -267,16 +283,37 @@ fun PlaylistOptionsSheet(
                 com.music.spotui.data.api.LibraryEdits.run(context, com.music.spotui.data.api.LibraryEdits.Remove(page.uri),
                     write = { MyspotiRuntime.api.blends.leave(page.uri) })
                 onDismiss(); onDeleted()
-            }) { Text(stringResource(R.string.blend_leave_button), color = Color(0xFFF15E6C)) }
+            }) { Text(stringResource(R.string.blend_leave_button), color = AppDestructive) }
         },
-        dismissButton = { TextButton(onClick = { leavingBlend = false }) { Text(stringResource(R.string.cancel), color = Color.White) } },
+        dismissButton = { TextButton(onClick = { leavingBlend = false }) { Text(stringResource(R.string.cancel), color = AppText) } },
     )
+
+    if (stoppingCollab) {
+        // Public (listed on the profile): collaborators are removed; private: they become listeners.
+        val public = published == true
+        AlertDialog(
+            onDismissRequest = { stoppingCollab = false },
+            containerColor = tone(0xFF282828),
+            title = { Text(stringResource(R.string.playlist_stop_collab), color = AppText) },
+            text = { Text(stringResource(if (public) R.string.playlist_stop_collab_public else R.string.playlist_stop_collab_private, page.name), color = AppMuted) },
+            confirmButton = {
+                TextButton(onClick = {
+                    stoppingCollab = false
+                    access = if (public) PlaylistAccess.PUBLIC else PlaylistAccess.PRIVATE
+                    android.widget.Toast.makeText(context, R.string.playlist_now_solo, android.widget.Toast.LENGTH_SHORT).show()
+                    // Written in order with the other visibility taps; a refusal puts back what Spotify has.
+                    com.music.spotui.data.api.SpotifySync.stopPlaylistCollaboration(page.uri) { ok -> if (ok) onChanged() else restore() }
+                }) { Text(stringResource(R.string.playlist_stop_collab), color = AppDestructive) }
+            },
+            dismissButton = { TextButton(onClick = { stoppingCollab = false }) { Text(stringResource(R.string.cancel), color = AppText) } },
+        )
+    }
 
     if (leavingPlaylist) AlertDialog(
         onDismissRequest = { leavingPlaylist = false },
-        containerColor = Color(0xFF282828),
-        title = { Text(stringResource(R.string.playlist_leave), color = Color.White) },
-        text = { Text(stringResource(R.string.playlist_leave_confirm, page.name), color = Color(0xFFB3B3B3)) },
+        containerColor = tone(0xFF282828),
+        title = { Text(stringResource(R.string.playlist_leave), color = AppText) },
+        text = { Text(stringResource(R.string.playlist_leave_confirm, page.name), color = AppMuted) },
         confirmButton = {
             TextButton(onClick = {
                 leavingPlaylist = false
@@ -285,15 +322,15 @@ fun PlaylistOptionsSheet(
                     write = { MyspotiRuntime.api.playlists.leave(page.uri) },
                     onDone = { ok -> if (ok) com.music.spotui.data.api.LibraryEdits.reloadSoon() })
                 onDismiss(); onDeleted()
-            }) { Text(stringResource(R.string.playlist_leave_button), color = Color(0xFFF15E6C)) }
+            }) { Text(stringResource(R.string.playlist_leave_button), color = AppDestructive) }
         },
-        dismissButton = { TextButton(onClick = { leavingPlaylist = false }) { Text(stringResource(R.string.cancel), color = Color.White) } },
+        dismissButton = { TextButton(onClick = { leavingPlaylist = false }) { Text(stringResource(R.string.cancel), color = AppText) } },
     )
 
     if (deleting) AlertDialog(
         onDismissRequest = { deleting = false },
-        containerColor = Color(0xFF282828),
-        text = { Text(stringResource(R.string.playlist_delete_confirm, page.name), color = Color.White) },
+        containerColor = tone(0xFF282828),
+        text = { Text(stringResource(R.string.playlist_delete_confirm, page.name), color = AppText) },
         confirmButton = {
             TextButton(onClick = {
                 deleting = false
@@ -301,9 +338,9 @@ fun PlaylistOptionsSheet(
                 com.music.spotui.data.api.LibraryEdits.run(context, com.music.spotui.data.api.LibraryEdits.Remove(page.uri),
                     write = { MyspotiRuntime.api.playlists.delete(page.uri) })
                 onDismiss(); onDeleted()
-            }) { Text(stringResource(R.string.actions_picker_delete), color = Color(0xFFF15E6C)) }
+            }) { Text(stringResource(R.string.actions_picker_delete), color = AppDestructive) }
         },
-        dismissButton = { TextButton(onClick = { deleting = false }) { Text(stringResource(R.string.cancel), color = Color.White) } },
+        dismissButton = { TextButton(onClick = { deleting = false }) { Text(stringResource(R.string.cancel), color = AppText) } },
     )
 }
 
@@ -328,19 +365,19 @@ private fun EditDetailsDialog(page: ContextPageModel, onDismiss: () -> Unit, onS
         }
     }
     val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedTextColor = Color.White, unfocusedTextColor = Color.White, cursorColor = AppAccent,
+        focusedTextColor = AppText, unfocusedTextColor = AppText, cursorColor = AppAccent,
         focusedBorderColor = AppAccent, unfocusedBorderColor = Color(0xFF555555),
-        focusedLabelColor = AppAccent, unfocusedLabelColor = Color(0xFFB3B3B3),
+        focusedLabelColor = AppAccent, unfocusedLabelColor = AppMuted,
     )
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF282828),
-        title = { Text(stringResource(R.string.playlist_edit_details), color = Color.White) },
+        containerColor = tone(0xFF282828),
+        title = { Text(stringResource(R.string.playlist_edit_details), color = AppText) },
         text = {
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val c = cover
-                    Box(Modifier.size(96.dp).clip(RoundedCornerShape(4.dp)).background(Color(0xFF3A3A3A))
+                    Box(Modifier.size(96.dp).clip(RoundedCornerShape(4.dp)).background(tone(0xFF3A3A3A))
                         .clickable { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
                         when (c) {
                             is CoverChange.New -> Image(c.preview.asImageBitmap(), null, contentScale = ContentScale.Crop, modifier = Modifier.size(96.dp))
@@ -352,10 +389,10 @@ private fun EditDetailsDialog(page: ContextPageModel, onDismiss: () -> Unit, onS
                     Spacer(Modifier.width(12.dp))
                     Column {
                         TextButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
-                            Text(stringResource(R.string.playlist_change_cover), color = Color.White)
+                            Text(stringResource(R.string.playlist_change_cover), color = AppText)
                         }
                         TextButton(onClick = { cover = CoverChange.Remove }) {
-                            Text(stringResource(R.string.playlist_remove_cover), color = Color(0xFFB3B3B3))
+                            Text(stringResource(R.string.playlist_remove_cover), color = AppMuted)
                         }
                     }
                 }
@@ -372,7 +409,7 @@ private fun EditDetailsDialog(page: ContextPageModel, onDismiss: () -> Unit, onS
                 Text(stringResource(R.string.playlist_save), color = AppAccent, fontWeight = FontWeight.Bold)
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel), color = Color.White) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel), color = AppText) } },
     )
 }
 
@@ -393,15 +430,15 @@ private fun coverJpeg(context: Context, uri: Uri): Pair<ByteArray, Bitmap> {
 }
 
 @Composable
-private fun OptionRow(icon: ImageVector, label: String, enabled: Boolean = true, onClick: () -> Unit) {
+internal fun OptionRow(icon: ImageVector, label: String, enabled: Boolean = true, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick).padding(horizontal = 20.dp, vertical = 14.dp)
             .then(if (enabled) Modifier else Modifier.alpha(0.4f)),
     ) {
-        Icon(icon, null, tint = Color.White, modifier = Modifier.size(24.dp))
+        Icon(icon, null, tint = AppText, modifier = Modifier.size(24.dp))
         Spacer(Modifier.width(16.dp))
-        Text(label, color = Color.White, fontSize = 16.sp)
+        Text(label, color = AppText, fontSize = 16.sp)
     }
 }
 

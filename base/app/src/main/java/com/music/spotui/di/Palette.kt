@@ -9,6 +9,12 @@ import com.bumptech.glide.Glide
 import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
 
+/**
+ * Side of the cover decode for colours and the mesh gradient. Glide keys its decodes on the size,
+ * so one size means the cover is decoded once for both.
+ */
+const val COVER_DECODE_PX = 128
+
 class Palette {
     companion object {
         /** The tint when a cover gives none (none loaded). */
@@ -45,7 +51,7 @@ class Palette {
         Glide.with(context)
             .asBitmap()
             .load(imageUrl)
-            .override(64, 64)
+            .override(COVER_DECODE_PX, COVER_DECODE_PX)
             .disallowHardwareConfig()
             .into(object : CustomTarget<Bitmap>() {
                 override fun onResourceReady(resource: Bitmap, transition: Transition<in Bitmap>?) {
@@ -75,7 +81,7 @@ class Palette {
         Glide.with(context)
             .asBitmap()
             .load(imageUrl)
-            .override(64, 64)
+            .override(COVER_DECODE_PX, COVER_DECODE_PX)
             .disallowHardwareConfig()
             .into(object : CustomTarget<Bitmap>() {
                 override fun onResourceReady(resource: Bitmap, transition: Transition<in Bitmap>?) {

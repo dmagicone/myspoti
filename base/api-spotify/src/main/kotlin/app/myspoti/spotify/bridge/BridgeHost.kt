@@ -55,6 +55,8 @@ object AdBlock {
         "googleads.g.doubleclick.net",
         "pagead2.googlesyndication.com",
         "imasdk.googleapis.com",
+        // DoubleClick's ad media CDN (host list credit: coldMEW/Hush, GPL-3.0).
+        "s0.2mdn.net",
         // Third-party audience trackers the page loads (nothing it needs to play).
         "googletagmanager.com",
         "google-analytics.com",
@@ -86,7 +88,7 @@ object AdBlock {
      * is left as it is; an ad that is already the current state cannot be left out either.
      */
     fun withoutAds(body: String): Pair<String, List<String>>? {
-        if ("\"AD\"" !in body) return null
+        if (!AD_HINT.containsMatchIn(body)) return null
         val root = runCatching { Json.parseToJsonElement(body).jsonObject }.getOrNull() ?: return null
         val notes = mutableListOf<String>()
         val out = root.toMutableMap()
@@ -113,14 +115,14 @@ object AdBlock {
 
     /** The [AdAhead] in a track-playback reply (after [withoutAds]), or null. */
     fun adAhead(body: String): AdAhead? = runCatching {
-        if ("\"AD\"" !in body) return null
+        if (!AD_HINT.containsMatchIn(body)) return null
         val root = Json.parseToJsonElement(body).jsonObject
         val machine = root["state_machine"] as? JsonObject ?: return null
         val tracks = machine["tracks"] as? JsonArray ?: return null
         val states = machine["states"] as? JsonArray ?: return null
         fun index(o: JsonObject?, key: String) = (o?.get(key) as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
         fun trackOf(state: Int) = index(states.getOrNull(state) as? JsonObject, "track")?.let { tracks.getOrNull(it) as? JsonObject }
-        fun isAd(state: Int) = (trackOf(state)?.get("content_type") as? JsonPrimitive)?.contentOrNull == "AD"
+        fun isAd(state: Int) = isAdTrack(trackOf(state))
         fun uriOf(state: Int) = ((trackOf(state)?.get("metadata") as? JsonObject)?.get("uri") as? JsonPrimitive)?.contentOrNull
         val current = index(root["updated_state_ref"] as? JsonObject, "state_index") ?: return null
         if (isAd(current)) return null
@@ -133,12 +135,57 @@ object AdBlock {
         AdAhead((state["track_uid"] as? JsonPrimitive)?.contentOrNull, uriOf(current), next)
     }.getOrNull()
 
+    /**
+     * Something in a reply that may be an ad: Spotify's `content_type` "AD", or the markers its
+     * metadata carries (the same ones the host's relay and the bridge's `isAd` look for). Only a
+     * pre-check: [isAdTrack] decides, on the track itself.
+     */
+    private val AD_HINT = Regex("\"AD\"|spotify:ad:|\"is_advertisement\"|\"ad_id\"")
+
+    /**
+     * A track of a state machine that is an ad: `content_type` "AD", or metadata flagging it
+     * (`is_advertisement` true, an `spotify:ad:` uri, an `ad_id`). Seen in every capture so far:
+     * all four on each ad, none on a song; a song whose name or album merely says "ad" is no ad.
+     */
+    fun isAdTrack(track: JsonObject?): Boolean {
+        track ?: return false
+        if ((track["content_type"] as? JsonPrimitive)?.contentOrNull == "AD") return true
+        val metadata = track["metadata"] as? JsonObject ?: return false
+        val flag = (metadata["is_advertisement"] as? JsonPrimitive)?.contentOrNull
+        if (flag.equals("true", ignoreCase = true)) return true
+        if ((metadata["uri"] as? JsonPrimitive)?.contentOrNull?.startsWith("spotify:ad:") == true) return true
+        return !(metadata["ad_id"] as? JsonPrimitive)?.contentOrNull.isNullOrBlank()
+    }
+
+    /**
+     * Why [withoutAds] left a reply that looks like it holds an ad as it was, for the log: what
+     * marked it, and what kept it (the ad is the song now, no song to send its way to, no ad track
+     * at all). Null when it does not look like one.
+     */
+    fun whyKept(body: String): String? = runCatching {
+        val marker = AD_HINT.find(body)?.value?.trim('"') ?: return null
+        val root = Json.parseToJsonElement(body).jsonObject
+        val machine = root["state_machine"] as? JsonObject ?: return "$marker: no state machine in the reply"
+        val tracks = machine["tracks"] as? JsonArray ?: return "$marker: no tracks"
+        val states = machine["states"] as? JsonArray ?: return "$marker: no states"
+        fun index(o: JsonObject?, key: String) = (o?.get(key) as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
+        fun isAd(state: Int) = isAdTrack(index(states.getOrNull(state) as? JsonObject, "track")?.let { tracks.getOrNull(it) as? JsonObject })
+        if (tracks.none { isAdTrack(it as? JsonObject) }) return "$marker: no ad track (the marker is elsewhere in the reply)"
+        index(root["updated_state_ref"] as? JsonObject, "state_index")?.let { if (isAd(it)) return "$marker: the ad is the current song" }
+        val blocked = states.indices.any { i ->
+            val t = (states[i] as? JsonObject)?.get("transitions") as? JsonObject ?: return@any false
+            !isAd(i) && listOf("advance", "skip_next").all { k -> index(t[k] as? JsonObject, "state_index")?.let(::isAd) == true }
+        }
+        if (blocked) "$marker: the song before the ad has no other way on (its skip leads to the ad too)"
+        else "$marker: no song leads to the ad"
+    }.getOrElse { "not readable: ${it.javaClass.simpleName}" }
+
     private fun machineWithoutAds(machine: JsonObject, notes: MutableList<String>): JsonObject? {
         val tracks = machine["tracks"] as? JsonArray ?: return null
         val states = machine["states"] as? JsonArray ?: return null
         fun trackOf(state: Int) = ((states.getOrNull(state) as? JsonObject)?.get("track") as? JsonPrimitive)
             ?.contentOrNull?.toIntOrNull()?.let { tracks.getOrNull(it) as? JsonObject }
-        fun isAd(state: Int) = (trackOf(state)?.get("content_type") as? JsonPrimitive)?.contentOrNull == "AD"
+        fun isAd(state: Int) = isAdTrack(trackOf(state))
         fun nameOf(state: Int) = ((trackOf(state)?.get("metadata") as? JsonObject)?.get("name") as? JsonPrimitive)?.contentOrNull
         fun indexOf(transition: JsonObject) = (transition["state_index"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
         var changed = false
@@ -188,4 +235,33 @@ object AdBlock {
         val quoted = name.replace("\\", "\\\\").replace("\"", "\\\"")
         body.replace("\"$old\"", "\"$quoted\"")
     }.getOrDefault(body)
+}
+
+/**
+ * The media manifests Spotify sent the player: each song of a track-playback reply's state
+ * machines, its `manifest` (formats and file ids) as it came. Read by extensions
+ * (`spotify.media`), never changed; the last [MAX] songs are kept.
+ */
+object MediaManifests {
+    private const val MAX = 200
+    private val byUri = object : LinkedHashMap<String, JsonObject>(MAX, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, JsonObject>?) = size > MAX
+    }
+
+    /** Keeps the manifests of a track-playback reply's songs. */
+    fun record(body: String) {
+        if ("\"manifest\"" !in body) return
+        val root = runCatching { Json.parseToJsonElement(body).jsonObject }.getOrNull() ?: return
+        for (key in listOf("state_machine", "previous_state_machine")) {
+            val tracks = (root[key] as? JsonObject)?.get("tracks") as? JsonArray ?: continue
+            tracks.forEach { t ->
+                val track = t as? JsonObject ?: return@forEach
+                val uri = ((track["metadata"] as? JsonObject)?.get("uri") as? JsonPrimitive)?.contentOrNull ?: return@forEach
+                val manifest = track["manifest"] as? JsonObject ?: return@forEach
+                if (uri.startsWith("spotify:track:") && manifest.isNotEmpty()) synchronized(byUri) { byUri[uri] = manifest }
+            }
+        }
+    }
+
+    fun of(trackUri: String): JsonObject? = synchronized(byUri) { byUri[trackUri] }
 }

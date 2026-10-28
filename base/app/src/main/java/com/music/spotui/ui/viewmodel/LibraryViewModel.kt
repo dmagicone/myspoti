@@ -77,37 +77,15 @@ class LibraryViewModel constructor(
             if (response !is Response.Success && _entries.value is Response.Success) return@collect
             // Nothing saved yet and no network: offer just the downloads (not cached).
             if (response is Response.Error) {
-                if (!flatFallback()) _entries.value = Response.Success(emptyList())
+                _entries.value = Response.Success(emptyList())
                 return@collect
             }
             if (response is Response.Success) {
                 server = response.data
                 show()
                 cacheLibraryEntries(context, response.data)
-                // libraryV3 answered but with nothing in it (an account whose library
-                // list comes back empty there): the tab would show Liked Songs alone.
-                if (response.data.size <= 1) flatFallback()
             } else _entries.value = response
         }
-    }
-
-    /**
-     * The flat library (Liked Songs, the rootlist's playlists, the saved albums — the
-     * list Android Auto reads) in place of an empty libraryV3 answer. Only a longer
-     * list replaces what is shown, so an account with a genuinely empty library and
-     * the edits overlay are untouched.
-     */
-    private suspend fun flatFallback(): Boolean {
-        val flat = runCatching {
-            var out: List<LibraryEntry>? = null
-            Graph.api.getLibrary().collect { if (it is Response.Success) out = it.data }
-            out
-        }.getOrNull() ?: return false
-        if (flat.size <= (server?.size ?: 0)) return false
-        server = flat
-        show()
-        cacheLibraryEntries(context, flat)
-        return true
     }
 
     private fun loadFollowedArtists() = viewModelScope.launch(Dispatchers.IO) {

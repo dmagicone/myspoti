@@ -26,6 +26,7 @@ object Graph {
         com.music.spotui.data.api.SupportReminder.init(application)
         com.music.spotui.data.offline.OfflineStore.init(application)
         com.music.spotui.data.offline.OfflineCollections.init(application)
+        SongPlayer.startLibraryOutbox(application)
         com.music.spotui.data.offline.OfflineCollections.refreshAll(application)
         com.music.spotui.data.local.LocalPlaylists.init(application)
         com.music.spotui.data.local.LibraryOrder.init(application)
@@ -33,6 +34,8 @@ object Graph {
         com.music.spotui.data.offline.OfflineDownloader.resumePending()
         // Episodes have their own queue and their own file: resumed the same way.
         com.music.spotui.data.offline.PodcastDownloader.resumePending()
+        // Installed extensions: each enabled one loads in its own sandbox, off the main thread.
+        com.music.spotui.extensions.Extensions.init(application)
     }
 
     val api: Api by lazy { Api(app) }

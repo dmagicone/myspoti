@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="immersive_genius_none">Genius n\'a rien sur ce morceau.</string>
+    <string name="immersive_genius_error">Genius est injoignable pour le moment.</string>
+    <string name="immersive_genius_view">Voir sur Genius</string>
+</resources>

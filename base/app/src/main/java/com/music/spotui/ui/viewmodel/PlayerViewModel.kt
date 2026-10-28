@@ -140,7 +140,7 @@ class PlayerViewModel constructor(private val currentSongState: CurrentSongState
         val song = queueSongs[index]
         if (song.id == currentSongId.value) return
         updateSongState(song.coverUri, song.title, song.singer, true, song.id, index, song.album)
-        SongPlayer.playSong(song.url, context)
+        SongPlayer.playSong(song.url, context, songs = queueSongs)
     }
 
     fun playPreviousSong(queueSongs : List<SongsModel>, context: Context) {

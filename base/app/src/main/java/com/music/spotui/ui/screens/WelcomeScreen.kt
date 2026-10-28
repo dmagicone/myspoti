@@ -1,6 +1,11 @@
 package com.music.spotui.ui.screens
 
+import com.music.spotui.ui.theme.tone
+import com.music.spotui.ui.theme.AppText
+
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -95,10 +100,10 @@ fun WelcomeScreen(onLogin: () -> Unit) {
                             scaleX = s; scaleY = s
                         }
                         .clip(RoundedCornerShape(32.dp))
-                        .background(Color(0xFF181818)),
+                        .background(tone(0xFF181818)),
                 )
                 Spacer(Modifier.height(28.dp))
-                Text("Myspoti", color = Color.White, fontFamily = AppSans, fontWeight = FontWeight.ExtraBold, fontSize = 40.sp,
+                Text("Myspoti", color = AppText, fontFamily = AppSans, fontWeight = FontWeight.ExtraBold, fontSize = 40.sp,
                     modifier = Modifier.rise(1))
                 Spacer(Modifier.height(12.dp))
                 Box(Modifier.rise(2)) { Features() }
@@ -121,7 +126,7 @@ fun WelcomeScreen(onLogin: () -> Unit) {
                 }
                 Text(
                     stringResource(R.string.welcome_privacy),
-                    color = Color.White.copy(alpha = 0.5f), fontFamily = AppSans, fontSize = 13.sp, lineHeight = 18.sp,
+                    color = AppText.copy(alpha = 0.5f), fontFamily = AppSans, fontSize = 13.sp, lineHeight = 18.sp,
                     textAlign = TextAlign.Center, modifier = Modifier.padding(top = 14.dp),
                 )
             }
@@ -132,8 +137,13 @@ fun WelcomeScreen(onLogin: () -> Unit) {
 /** A soft green light behind the logo, drifting slowly. */
 @Composable
 internal fun Glow(modifier: Modifier = Modifier, alpha: Float = 0.30f) {
-    val t = rememberInfiniteTransition(label = "glow")
-    val phase by t.animateFloat(0f, (2 * PI).toFloat(), infiniteRepeatable(tween(16_000, easing = LinearEasing)), label = "phase")
+    // "Remove animations": the light stays where it starts.
+    val reduce = com.music.spotui.ui.look.rememberReduceMotion()
+    val phase = if (reduce) 0f else {
+        val t = rememberInfiniteTransition(label = "glow")
+        val p by t.animateFloat(0f, (2 * PI).toFloat(), infiniteRepeatable(tween(16_000, easing = LinearEasing)), label = "phase")
+        p
+    }
     Canvas(modifier) {
         val c = Offset(size.width * (0.5f + 0.12f * sin(phase)), size.height * (0.30f + 0.05f * cos(phase)))
         val r = size.width * 1.05f
@@ -148,26 +158,27 @@ private fun Features() {
         stringResource(R.string.welcome_rotate_ads),
         stringResource(R.string.welcome_rotate_lyrics),
         stringResource(R.string.welcome_rotate_clips),
-        stringResource(R.string.welcome_rotate_lossless),
         stringResource(R.string.welcome_rotate_offline),
     )
     var index by remember { mutableIntStateOf(0) }
+    val reduce = com.music.spotui.ui.look.rememberReduceMotion()
     LaunchedEffect(Unit) {
         delay(1_200)
         while (true) { delay(2_400); index = (index + 1) % features.size }
     }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(stringResource(R.string.welcome_lead), color = Color.White.copy(alpha = 0.7f), fontFamily = AppSans,
+        Text(stringResource(R.string.welcome_lead), color = AppText.copy(alpha = 0.7f), fontFamily = AppSans,
             fontSize = 17.sp, textAlign = TextAlign.Center)
         AnimatedContent(
             targetState = index,
             transitionSpec = {
-                (slideInVertically(tween(400, easing = FastOutSlowInEasing)) { it / 2 } + fadeIn(tween(400))) togetherWith
+                if (reduce) EnterTransition.None togetherWith ExitTransition.None
+                else (slideInVertically(tween(400, easing = FastOutSlowInEasing)) { it / 2 } + fadeIn(tween(400))) togetherWith
                     (slideOutVertically(tween(400, easing = FastOutSlowInEasing)) { -it / 2 } + fadeOut(tween(250)))
             },
             label = "feature",
         ) { i ->
-            Text(features[i], color = Color.White, fontFamily = AppSans, fontWeight = FontWeight.Bold, fontSize = 19.sp,
+            Text(features[i], color = AppText, fontFamily = AppSans, fontWeight = FontWeight.Bold, fontSize = 19.sp,
                 textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 2.dp))
         }
     }

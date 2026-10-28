@@ -68,7 +68,7 @@ fun isCanvasWifiOnly(c: Context): Boolean = prefs(c).getBoolean(KEY_CANVAS_WIFI,
 fun setCanvasWifiOnly(c: Context, on: Boolean) = prefs(c).edit().putBoolean(KEY_CANVAS_WIFI, on).apply()
 
 fun getDownloadQuality(c: Context): DownloadQuality = when {
-    !isLosslessEnabled(c) -> DownloadQuality.OFF
+    !isDownloadsEnabled(c) -> DownloadQuality.OFF
     isAskDownloadQuality(c) -> DownloadQuality.ASK
     isSmallDownloads(c) -> DownloadQuality.SMALL
     isHiRes(c) -> DownloadQuality.HI_RES
@@ -76,7 +76,7 @@ fun getDownloadQuality(c: Context): DownloadQuality = when {
 }
 
 fun setDownloadQuality(c: Context, q: DownloadQuality) {
-    setLosslessEnabled(c, q != DownloadQuality.OFF)
+    setDownloadsEnabled(c, q != DownloadQuality.OFF)
     setHiRes(c, q == DownloadQuality.HI_RES)
     setSmallDownloads(c, q == DownloadQuality.SMALL)
     setAskDownloadQuality(c, q == DownloadQuality.ASK)

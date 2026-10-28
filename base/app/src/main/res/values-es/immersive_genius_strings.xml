@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="immersive_genius_none">Genius no tiene nada sobre esta canción.</string>
+    <string name="immersive_genius_error">No se puede conectar con Genius ahora mismo.</string>
+    <string name="immersive_genius_view">Ver en Genius</string>
+</resources>

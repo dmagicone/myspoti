@@ -1,5 +1,9 @@
 package com.music.spotui.ui.components
 
+import com.music.spotui.ui.theme.tone
+import com.music.spotui.ui.theme.AppText
+import com.music.spotui.ui.theme.AppMuted
+
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -18,7 +22,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -51,29 +54,30 @@ private fun openUrl(context: Context, url: String) {
 @Composable
 fun AboutSheet(onDismiss: () -> Unit) {
     val context = LocalContext.current
+    com.music.spotui.extensions.ProtectedSurfaceEffect(app.myspoti.extensions.ProtectedSurface.ABOUT)
     // Opened in full: half open, it hid the support buttons at the bottom.
-    ModalBottomSheet(
+    LookSheet(
         onDismissRequest = onDismiss,
         sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = Color(0xFF282828),
+        containerColor = tone(0xFF282828),
     ) {
         Column(Modifier.navigationBarsPadding().verticalScroll(rememberScrollState()).padding(bottom = 20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 20.dp)) {
                 Image(
                     painterResource(R.drawable.ic_launcher_foreground), contentDescription = null,
-                    modifier = Modifier.size(56.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF121212)),
+                    modifier = Modifier.size(56.dp).clip(RoundedCornerShape(14.dp)).background(tone(0xFF121212)),
                 )
                 Column(Modifier.padding(start = 14.dp)) {
-                    Text("Myspoti", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text("Myspoti", color = AppText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     Text("${stringResource(R.string.settings_item_version_title)} ${BuildConfig.VERSION_NAME}",
-                        color = Color(0xFFB3B3B3), fontSize = 13.sp)
+                        color = AppMuted, fontSize = 13.sp)
                 }
             }
-            Text(stringResource(R.string.about_free), color = Color(0xFFB3B3B3), fontSize = 13.sp,
+            Text(stringResource(R.string.about_free), color = AppMuted, fontSize = 13.sp,
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 8.dp))
             AboutRow(stringResource(R.string.about_discord), stringResource(R.string.about_discord_detail)) { openUrl(context, DISCORD_URL) }
             AboutRow(stringResource(R.string.about_github), stringResource(R.string.about_github_detail)) { openUrl(context, "https://github.com/$repo") }
-            Text(stringResource(R.string.support_body), color = Color(0xFFB3B3B3), fontSize = 13.sp,
+            Text(stringResource(R.string.support_body), color = AppMuted, fontSize = 13.sp,
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 12.dp))
             Box(
                 contentAlignment = Alignment.Center,
@@ -92,9 +96,9 @@ fun GitHubSponsorButton(modifier: Modifier = Modifier, onClick: (() -> Unit)? = 
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(50))
-            .border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(50))
+            .border(1.dp, AppText.copy(alpha = 0.6f), RoundedCornerShape(50))
             .pressable(0.96f) { onClick?.invoke() ?: SupportReminder.openSponsors(context) },
-    ) { Text(stringResource(R.string.support_github_action), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+    ) { Text(stringResource(R.string.support_github_action), color = AppText, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
 }
 
 /** "Support Myspoti" from the profile menu: Ko-fi or GitHub Sponsors, the user picks. */
@@ -102,14 +106,15 @@ fun GitHubSponsorButton(modifier: Modifier = Modifier, onClick: (() -> Unit)? = 
 @Composable
 fun SupportSheet(onDismiss: () -> Unit) {
     val context = LocalContext.current
-    ModalBottomSheet(
+    com.music.spotui.extensions.ProtectedSurfaceEffect(app.myspoti.extensions.ProtectedSurface.SUPPORT)
+    LookSheet(
         onDismissRequest = onDismiss,
         sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = Color(0xFF282828),
+        containerColor = tone(0xFF282828),
     ) {
         androidx.compose.foundation.layout.Column(Modifier.padding(start = 20.dp, end = 20.dp, bottom = 28.dp)) {
-            Text(stringResource(R.string.support_title), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Text(stringResource(R.string.support_body), color = Color(0xFFB3B3B3), fontSize = 14.sp,
+            Text(stringResource(R.string.support_title), color = AppText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.support_body), color = AppMuted, fontSize = 14.sp,
                 modifier = Modifier.padding(top = 10.dp, bottom = 18.dp))
             Box(
                 contentAlignment = Alignment.Center,
@@ -124,7 +129,7 @@ fun SupportSheet(onDismiss: () -> Unit) {
 @Composable
 private fun AboutRow(title: String, detail: String, onClick: () -> Unit) {
     Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 10.dp)) {
-        Text(title, color = Color.White, fontSize = 16.sp)
-        Text(detail, color = Color(0xFFB3B3B3), fontSize = 12.sp)
+        Text(title, color = AppText, fontSize = 16.sp)
+        Text(detail, color = AppMuted, fontSize = 12.sp)
     }
 }

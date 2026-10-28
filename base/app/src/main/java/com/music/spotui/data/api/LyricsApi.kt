@@ -48,7 +48,13 @@ object LyricsApi {
     // "not found" is often just a timeout, not a fact.
     private class Miss(val at: Long = System.currentTimeMillis())
     private const val MISS_RETRY_MS = 120_000L
-    private val cache = java.util.concurrent.ConcurrentHashMap<String, Any>() // Lyrics | Miss
+    // Newest MEMORY_MAX tracks only; the older ones are on storage (LyricsDisk) or asked for again.
+    private const val MEMORY_MAX = 100
+    private val cache: MutableMap<String, Any> = java.util.Collections.synchronizedMap( // Lyrics | Miss
+        object : LinkedHashMap<String, Any>(128, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Any>) = size > MEMORY_MAX
+        }
+    )
     private val inFlight = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Deferred<Lyrics?>>()
     private val scope =
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
@@ -78,10 +84,10 @@ object LyricsApi {
         scope.launch { runCatching { fetch(track) } }
     }
 
-    fun forget(track: Track) { cache.remove(track.key) }
+    fun forget(track: Track) { cache.remove(track.key); scope.launch { LyricsDisk.drop(track.key) } }
 
     /** A setting changed what is looked for: every song is read again when next shown. */
-    fun forgetAll() { cache.clear() }
+    fun forgetAll() { cache.clear(); scope.launch { LyricsDisk.clear() } }
 
     suspend fun fetch(track: Track): Lyrics? {
         when (val c = cache[track.key]) {
@@ -91,7 +97,8 @@ object LyricsApi {
         // One request per track even when the card and the full screen ask together.
         val job = synchronized(inFlight) {
             inFlight[track.key] ?: scope.async(start = kotlinx.coroutines.CoroutineStart.LAZY) {
-                resolve(track)
+                // Read on an earlier run: from storage, not asked for again.
+                LyricsDisk.read(track.key)?.also { cache[track.key] = it } ?: resolve(track)
             }.also { created ->
                 inFlight[track.key] = created
                 created.invokeOnCompletion { inFlight.remove(track.key, created) }
@@ -102,12 +109,104 @@ object LyricsApi {
         return job.await()
     }
 
-    private suspend fun resolve(track: Track): Lyrics? {
-        val result = if (wordSync) wordFirst(track) else fromSpotify(track) ?: lineFallbacks(track)
+    private suspend fun resolve(track: Track): Lyrics? = coroutineScope {
+        // Extensions that provide lyrics are asked at the same time as the app's own sources
+        // (each within its time limit); the better answer is kept (LyricsMerge), Spotify's own
+        // complete lyrics first at the same level, and then the extensions are not waited for.
+        val ext = if (extensionsAsked()) async {
+            runCatching {
+                com.music.spotui.extensions.Extensions.lyricsFor(track.trackId, track.title, track.artist, track.album, track.durationMs, track.coverUrl)
+            }.getOrNull()
+        } else null
+        val own = if (wordSync) wordFirst(track) else fromSpotify(track) ?: lineFallbacks(track)
+        val fromExt = when {
+            ext == null -> null
+            own != null && com.music.spotui.extensions.LyricsMerge.rank(own) == 3 && com.music.spotui.extensions.LyricsMerge.isSpotifyComplete(own) -> { ext.cancel(); null }
+            else -> ext.await()
+        }
+        val result = com.music.spotui.extensions.LyricsMerge.choose(own, fromExt)
         cache[track.key] = result ?: Miss()
+        result?.let { LyricsDisk.write(track.key, it) }
         Log.d("LyricsApi", "${track.title}: ${result?.let { "${it.lines.size} lines from ${it.provider}, synced=${it.synced}, words=${it.wordSynced}" } ?: "none"}")
-        return result
+        result
     }
+
+    /**
+     * The lyrics of the last [MAX_FILES] tracks, one file each in private storage, so a song heard
+     * before is not looked up again after a restart. Only line- or word-synced lyrics are kept (a
+     * plain text or a Free-cap preview may just be a fallback of the moment), for [MAX_AGE_MS].
+     * The oldest file by last use goes first. Every call copes with there being no app (unit tests).
+     */
+    private object LyricsDisk {
+        private const val MAX_FILES = 300
+        private const val MAX_AGE_MS = 14 * 24 * 3_600_000L
+        private val dir: java.io.File? by lazy {
+            runCatching { java.io.File(com.music.spotui.di.Graph.app.filesDir, "lyrics_cache1").also { it.mkdirs() } }.getOrNull()
+        }
+        private var writes = 0
+
+        private fun file(key: String): java.io.File? {
+            val sha = java.security.MessageDigest.getInstance("SHA-1").digest(key.toByteArray())
+            return dir?.let { java.io.File(it, sha.joinToString("") { b -> "%02x".format(b) } + ".json") }
+        }
+
+        fun read(key: String): Lyrics? = runCatching {
+            val f = file(key)?.takeIf { it.exists() } ?: return null
+            val o = JSONObject(f.readText())
+            if (o.getString("key") != key) return null
+            if (System.currentTimeMillis() - o.getLong("at") > MAX_AGE_MS) { f.delete(); return null }
+            f.setLastModified(System.currentTimeMillis()) // used just now: it stays
+            decode(o)
+        }.onFailure { Log.w("LyricsApi", "unreadable lyrics file: ${it.javaClass.simpleName}") }.getOrNull()
+
+        fun write(key: String, lyrics: Lyrics) {
+            if (!lyrics.synced || !lyrics.uncapped || lyrics.isEmpty) return
+            runCatching {
+                val f = file(key) ?: return
+                val o = encode(lyrics).put("key", key).put("at", System.currentTimeMillis())
+                val tmp = java.io.File(f.parentFile, f.name + ".tmp")
+                tmp.writeText(o.toString())
+                if (!tmp.renameTo(f)) { f.delete(); tmp.renameTo(f) }
+                if (++writes % 20 == 0) prune()
+            }.onFailure { Log.w("LyricsApi", "could not keep lyrics: ${it.javaClass.simpleName}") }
+        }
+
+        fun drop(key: String) { runCatching { file(key)?.delete() } }
+
+        fun clear() { runCatching { dir?.listFiles()?.forEach { it.delete() } } }
+
+        private fun prune() {
+            dir?.listFiles { f -> f.name.endsWith(".json") }
+                ?.sortedByDescending { it.lastModified() }?.drop(MAX_FILES)?.forEach { it.delete() }
+        }
+
+        private fun encode(l: Lyrics) = JSONObject()
+            .put("synced", l.synced).put("language", l.language).put("provider", l.provider)
+            .put("colors", l.colors?.let { JSONArray(listOf(it.background, it.text, it.highlight)) })
+            .put("lines", JSONArray().also { arr ->
+                l.lines.forEach { line ->
+                    arr.put(JSONObject().put("t", line.timeMs).put("x", line.text).also { lo ->
+                        line.words?.let { ws -> lo.put("w", JSONArray().also { wa -> ws.forEach { w -> wa.put(JSONArray(listOf(w.startMs, w.endMs, w.text))) } }) }
+                    })
+                }
+            })
+
+        private fun decode(o: JSONObject): Lyrics {
+            val colors = o.optJSONArray("colors")?.let { LyricsColors(it.getInt(0), it.getInt(1), it.getInt(2)) }
+            val lines = o.getJSONArray("lines").let { arr ->
+                List(arr.length()) { i ->
+                    val lo = arr.getJSONObject(i)
+                    val words = lo.optJSONArray("w")?.let { wa -> List(wa.length()) { j -> wa.getJSONArray(j).let { LyricWord(it.getLong(0), it.getLong(1), it.getString(2)) } } }
+                    LyricLine(lo.getLong("t"), lo.getString("x"), words)
+                }
+            }
+            return Lyrics(lines, o.getBoolean("synced"), o.optString("language").takeIf { it.isNotEmpty() && it != "null" },
+                o.optString("provider").takeIf { it.isNotEmpty() && it != "null" }, colors)
+        }
+    }
+
+    /** Whether lyrics extensions are installed and running (false in unit tests: no app). */
+    private fun extensionsAsked(): Boolean = runCatching { com.music.spotui.extensions.Extensions.hasLyrics() }.getOrDefault(false)
 
     /**
      * "Word by word" (the setting): the sources with each word's time come first — Spotify's own

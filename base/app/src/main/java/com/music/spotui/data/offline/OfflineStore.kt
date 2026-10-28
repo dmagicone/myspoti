@@ -23,9 +23,9 @@ data class OfflineTrack(
     val file: String,
     /** Cover file name in the covers folder, empty when it could not be fetched. */
     val cover: String,
-    /** Where the audio came from (YouTube watch URL, or the podcast publisher). */
+    /** Where the audio came from (the download-source extension's provider, or "podcast"). */
     val source: String,
-    /** The audio was checked against the recording's official preview. */
+    /** The extension found the file by the song's ISRC (older downloads: checked against a preview). */
     val verified: Boolean,
     val bytes: Long,
     val addedAt: Long,
@@ -34,6 +34,11 @@ data class OfflineTrack(
      * older index stays valid (and its files are not swept as strays).
      */
     val kind: String = KIND_MUSIC,
+    /**
+     * The id of the download-source extension that supplied the file. Null when unknown: a
+     * podcast episode, or a download made before this field existed.
+     */
+    val providerId: String? = null,
 ) {
     val isEpisode: Boolean get() = kind == KIND_PODCAST
 
@@ -42,6 +47,7 @@ data class OfflineTrack(
         .put("albumId", albumId).put("duration", durationMs).put("coverUrl", coverUrl)
         .put("file", file).put("cover", cover).put("source", source).put("verified", verified)
         .put("bytes", bytes).put("added", addedAt).put("kind", kind)
+        .apply { providerId?.let { put("providerId", it) } }
 
     companion object {
         const val KIND_MUSIC = "MUSIC"
@@ -55,6 +61,8 @@ data class OfflineTrack(
             addedAt = o.optLong("added"),
             // Absent in an index written before podcasts: those entries are all music.
             kind = o.optString("kind").ifBlank { KIND_MUSIC },
+            // Absent in an index written before it was kept: unknown.
+            providerId = o.optString("providerId").ifBlank { null },
         )
     }
 }
@@ -193,7 +201,7 @@ object OfflineStore {
         artist = t.artist,
         album = t.album,
         durationMs = t.durationMs,
-        artUri = coverFile(t)?.let { Uri.fromFile(it) } ?: Uri.parse(t.coverUrl),
+        artUri = coverFile(t)?.let { Uri.fromFile(it) } ?: Uri.parse(app.myspoti.host.android.Covers.large(t.coverUrl)),
     )
 
     fun toSong(t: OfflineTrack) = SongsModel(

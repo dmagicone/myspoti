@@ -1,5 +1,10 @@
 package com.music.spotui.ui.components
 
+import com.music.spotui.ui.theme.tone
+import com.music.spotui.ui.theme.AppText
+import com.music.spotui.ui.theme.AppMuted
+import com.music.spotui.ui.theme.AppAccent
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -81,9 +86,9 @@ private fun <T> QualityGroup(
     onSelect: (T) -> Unit, modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxWidth().selectableGroup()) {
-        Text(title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold,
+        Text(title, color = AppText, fontSize = 17.sp, fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
-        Text(detail, color = Color(0xFFB3B3B3), fontSize = 13.sp,
+        Text(detail, color = AppMuted, fontSize = 13.sp,
             modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 4.dp))
         for (o in options) {
             val on = o.value == selected
@@ -94,10 +99,10 @@ private fun <T> QualityGroup(
                     .padding(horizontal = 8.dp, vertical = 4.dp),
             ) {
                 RadioButton(selected = on, onClick = null, modifier = Modifier.padding(horizontal = 8.dp),
-                    colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF1DB954), unselectedColor = Color(0xFFB3B3B3)))
+                    colors = RadioButtonDefaults.colors(selectedColor = AppAccent, unselectedColor = AppMuted))
                 Column(Modifier.weight(1f).padding(end = 12.dp)) {
-                    Text(stringResource(o.label), color = if (on) Color(0xFF1DB954) else Color.White, fontSize = 16.sp)
-                    Text(stringResource(o.detail), color = Color(0xFFB3B3B3), fontSize = 12.sp)
+                    Text(stringResource(o.label), color = if (on) AppAccent else AppText, fontSize = 16.sp)
+                    Text(stringResource(o.detail), color = AppMuted, fontSize = 12.sp)
                 }
             }
         }
@@ -128,8 +133,8 @@ fun DownloadAskHost() {
     )
     androidx.compose.material3.AlertDialog(
         onDismissRequest = { DownloadAsk.pending = null },
-        containerColor = Color(0xFF282828),
-        title = { Text(stringResource(R.string.quality_download_title), color = Color.White) },
+        containerColor = tone(0xFF282828),
+        title = { Text(stringResource(R.string.quality_download_title), color = AppText) },
         text = {
             Column {
                 for (o in choices) {
@@ -141,8 +146,8 @@ fun DownloadAskHost() {
                             })
                             .padding(vertical = 8.dp),
                     ) {
-                        Text(stringResource(o.label), color = Color.White, fontSize = 16.sp)
-                        Text(stringResource(o.detail), color = Color(0xFFB3B3B3), fontSize = 12.sp)
+                        Text(stringResource(o.label), color = AppText, fontSize = 16.sp)
+                        Text(stringResource(o.detail), color = AppMuted, fontSize = 12.sp)
                     }
                 }
             }
@@ -150,7 +155,7 @@ fun DownloadAskHost() {
         confirmButton = {},
         dismissButton = {
             androidx.compose.material3.TextButton(onClick = { DownloadAsk.pending = null }) {
-                Text(stringResource(R.string.add_to_playlist_button_cancel), color = Color.White)
+                Text(stringResource(R.string.add_to_playlist_button_cancel), color = AppText)
             }
         },
     )

@@ -1,5 +1,8 @@
 package com.music.spotui.ui.components
 
+import com.music.spotui.ui.theme.tone
+import com.music.spotui.ui.theme.AppText
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -95,9 +98,9 @@ fun ArtistChooserHost(navController: NavHostController) {
     val artists = ArtistChooser.artists
     if (artists.isEmpty()) return
     val dismiss = { ArtistChooser.artists = emptyList() }
-    ModalBottomSheet(onDismissRequest = dismiss, containerColor = Color(0xFF282828)) {
+    com.music.spotui.ui.components.LookSheet(onDismissRequest = dismiss, containerColor = tone(0xFF282828)) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
-            Text(stringResource(R.string.choose_artist), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold,
+            Text(stringResource(R.string.choose_artist), color = AppText, fontSize = 18.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(20.dp, 0.dp, 20.dp, 12.dp))
             artists.forEach { a ->
                 // The picture comes in after the name: the sheet opens at once.
@@ -113,11 +116,11 @@ fun ArtistChooserHost(navController: NavHostController) {
                         go(ArtistChooser.routeOf(a))
                     }.padding(horizontal = 20.dp, vertical = 8.dp),
                 ) {
-                    Box(Modifier.size(48.dp).clip(CircleShape).background(Color(0xFF3E3E3E))) {
+                    Box(Modifier.size(48.dp).clip(CircleShape).background(tone(0xFF3E3E3E))) {
                         if (picture != null) GlideImage(model = picture, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(48.dp))
                     }
                     Spacer(Modifier.width(14.dp))
-                    Text(a.name, color = Color.White, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(a.name, color = AppText, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }

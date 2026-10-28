@@ -98,7 +98,8 @@ as a page service (`service: Name.method`, through the bridge) or an HTTP endpoi
 | Add tracks | exposed | `addToPlaylist` |
 | Remove tracks | exposed | `removeFromPlaylist` (by row uid) |
 | Reorder tracks | exposed | `moveItemsInPlaylist` (`BOTTOM_OF_PLAYLIST` and `BEFORE_UID`) |
-| Hide a song in a playlist (Spotify's "Hide song") | needs capture | no operation name in the bundle table and no endpoint captured |
+| Hide a song in a playlist (Spotify's "Hide in this playlist") | not possible | the menu item calls `FeedbackAPI.addContextTrackBan(contextUri, trackUri)`, which the Web Player's `FeedbackAPI` leaves unimplemented (throws "Method not implemented"; `getCapabilities()` is `{canBan:false}`), so the item never shows there |
+| Add a whole playlist or album to another playlist, with the duplicate dialog | added now | the page reads the target (`getContents`), splits new from already-there songs and asks ("Add all" / "Add new ones", or "Add anyway" / "Don't add"), then `PlaylistAPI.add`; here `PlaylistMerge` + `addToPlaylist` in 100-song requests |
 | Sort the playlist (title, artist, album, date added, duration) with ascending or descending | added now | client side: `Playlists.sortedTracks` reads every page and sorts. The server has no sort parameter |
 | Playlist order as the playback order | exposed | `Player.play(order)` |
 | Delete a playlist | exposed | rootlist `REM` (`Playlists.delete`); for owned playlists the Web Player may do more, not confirmed |
@@ -124,8 +125,9 @@ as a page service (`service: Name.method`, through the bridge) or an HTTP endpoi
 | Public profile: name, avatar, follower and following counts, public playlists | exposed | spclient `user-profile-view/v3/profile/{id}` |
 | Follow and unfollow users, check follow state | exposed | `followUsers`, `unfollowUsers`, `isFollowingUsers` |
 | Followers list and following list of a user | needs capture | no operation or endpoint captured |
-| Top artists and tracks (per time range) | exposed | `userTopContent` |
-| Friend activity | not possible | the Web Player has no friend feed; `friendActivity()` returns an empty list |
+| Top artists and tracks (per time range) | exposed | `userTopContent`; `AffinityInput.timeRange` is `SHORT_TERM` (~4 weeks), `MID_TERM` (~6 months), `LONG_TERM` (~1 year), `MEDIUM_TERM` is refused; `sortBy` `AFFINITY`/`PLAY_COUNT`/`LAST_PLAYED`; ranks and `totalCount` only, no play counts |
+| Friend activity | exposed (spclient) | the Web Player's `BuddyFeedAPI` is a stub (`isSupported: false`), but the desktop feed's `GET presence-view/v1/buddylist` (guc-spclient, then spclient.wg) answers the page token on both hosts (200, checked 2026-10-23): `friends[] {timestamp, user{uri,name,imageUrl}, track{uri,name,imageUrl,album,artist,context{uri,name,index}}}`; "now" = played within 15 min |
+| Minutes listened, play counts, top-listener / early-fan badges | not exposed | the Web Player's listening-stats route only shows an "open the app" modal, and `queryArtistOverview` has no per-user fan data; Myspoti counts minutes on the phone (Recap) and shows "your #N artist" from `userTopContent` |
 | Private session | not possible | the Web Player reports `isSupported: false`; `setPrivateSession` throws |
 | Comments and reactions on entities | needs capture | `getCommentsForEntity`, `addComment`, `addCommentReaction` and others (not wired) |
 

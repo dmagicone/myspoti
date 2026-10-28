@@ -1,5 +1,9 @@
 package com.music.spotui.ui.screens
 
+import com.music.spotui.ui.components.wideClickable
+import com.music.spotui.ui.theme.headerTint
+import com.music.spotui.ui.theme.AppText
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -157,7 +161,7 @@ fun ShowScreen(navController: NavController, showId: String, showName: String = 
                             .clickable { oldestFirst = !oldestFirst }
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                     ) {
-                        Icon(Icons.Default.Tune, contentDescription = null, tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Tune, contentDescription = null, tint = AppText.copy(alpha = 0.8f), modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(10.dp))
                         Text(
                             text = stringResource(
@@ -168,7 +172,7 @@ fun ShowScreen(navController: NavController, showId: String, showName: String = 
                                     else -> R.string.show_sort_newest
                                 },
                             ),
-                            color = Color.White.copy(alpha = 0.8f),
+                            color = AppText.copy(alpha = 0.8f),
                             fontSize = 13.sp,
                         )
                     }
@@ -176,18 +180,13 @@ fun ShowScreen(navController: NavController, showId: String, showName: String = 
             }
             if (pageState is Response.Loading && page == null) item { Loader() }
             if (pageState is Response.Error && items.isEmpty()) item {
-                Text(
-                    (pageState as Response.Error).error,
-                    color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(16.dp),
-                )
+                com.music.spotui.ui.components.ErrorRetry(stringResource(R.string.page_load_failed)) { vm.loadShow(showId) }
             }
             if (tab == 1) item { About(show) }
             if (tab == 0 && page != null && items.isEmpty() && pageState !is Response.Loading) item {
                 Text(
                     stringResource(R.string.show_empty),
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = AppText.copy(alpha = 0.6f),
                     fontSize = 14.sp,
                     modifier = Modifier.padding(16.dp),
                 )
@@ -223,17 +222,17 @@ private fun Header(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Brush.verticalGradient(listOf(Color(0xFF33322F), AppBackground)))
+            .background(Brush.verticalGradient(listOf(headerTint(Color(0xFF33322F), 0f), AppBackground)))
             .statusBarsPadding(),
     ) {
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .padding(12.dp)
+                .wideClickable { navController.navigateUp() }
                 .size(40.dp)
                 .clip(CircleShape)
-                .background(Color.Black.copy(alpha = 0.35f))
-                .clickable { navController.navigateUp() },
+                .background(Color.Black.copy(alpha = 0.35f)),
         ) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.accessibility_navigate_back), tint = Color.White)
         }
@@ -251,7 +250,7 @@ private fun Header(
             Column(Modifier.weight(1f).padding(start = 16.dp)) {
                 Text(
                     text = show?.name?.takeIf { it.isNotBlank() } ?: fallbackName,
-                    color = Color.White,
+                    color = AppText,
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 3,
@@ -261,15 +260,15 @@ private fun Header(
                 val narrators = show?.narrators.orEmpty().joinToString(", ")
                 if (authors.isNotBlank()) {
                     Spacer(Modifier.height(6.dp))
-                    Text(stringResource(R.string.show_authors, authors), color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(stringResource(R.string.show_authors, authors), color = AppText.copy(alpha = 0.8f), fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
                 if (narrators.isNotBlank()) {
                     Spacer(Modifier.height(2.dp))
-                    Text(stringResource(R.string.show_narrators, narrators), color = Color.White.copy(alpha = 0.65f), fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(stringResource(R.string.show_narrators, narrators), color = AppText.copy(alpha = 0.65f), fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
                 if (authors.isBlank() && show != null && show.publisher.isNotBlank()) {
                     Spacer(Modifier.height(6.dp))
-                    Text(show.publisher, color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(show.publisher, color = AppText.copy(alpha = 0.8f), fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
@@ -280,11 +279,11 @@ private fun Header(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(start = 16.dp, top = 12.dp),
             ) {
-                Icon(Icons.Default.Star, contentDescription = null, tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.Star, contentDescription = null, tint = AppText.copy(alpha = 0.8f), modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(
                     text = String.format(java.util.Locale.getDefault(), "%.1f", rating),
-                    color = Color.White.copy(alpha = 0.8f),
+                    color = AppText.copy(alpha = 0.8f),
                     fontSize = 13.sp,
                 )
             }
@@ -305,18 +304,18 @@ private fun FollowPill(following: Boolean, onClick: () -> Unit) {
         modifier = Modifier
             .height(32.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(if (following) Color.White.copy(alpha = 0.12f) else Color.Transparent)
+            .background(if (following) AppText.copy(alpha = 0.12f) else Color.Transparent)
             .pressable(0.96f, onClick = onClick)
             .padding(horizontal = 16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (following) {
-                Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.Check, contentDescription = null, tint = AppText, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
             }
             Text(
                 text = stringResource(if (following) R.string.show_following else R.string.show_follow),
-                color = Color.White,
+                color = AppText,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
             )
@@ -332,7 +331,7 @@ private fun TabLabel(text: String, selected: Boolean, modifier: Modifier = Modif
     ) {
         Text(
             text = text,
-            color = if (selected) Color.White else Color.White.copy(alpha = 0.6f),
+            color = if (selected) AppText else AppText.copy(alpha = 0.6f),
             fontSize = 14.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
         )
@@ -353,16 +352,16 @@ private fun About(show: PodcastModel?) {
     Column(Modifier.fillMaxWidth().padding(16.dp)) {
         Text(
             text = show?.description.orEmpty(),
-            color = Color.White.copy(alpha = 0.75f),
+            color = AppText.copy(alpha = 0.75f),
             fontSize = 14.sp,
         )
         if (authors.isNotBlank()) {
             Spacer(Modifier.height(12.dp))
-            Text(stringResource(R.string.show_authors, authors), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
+            Text(stringResource(R.string.show_authors, authors), color = AppText.copy(alpha = 0.6f), fontSize = 13.sp)
         }
         if (narrators.isNotBlank()) {
             Spacer(Modifier.height(4.dp))
-            Text(stringResource(R.string.show_narrators, narrators), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
+            Text(stringResource(R.string.show_narrators, narrators), color = AppText.copy(alpha = 0.6f), fontSize = 13.sp)
         }
     }
 }
@@ -393,7 +392,7 @@ private fun EpisodeRow(
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
                 Text(
                     text = episode.title,
-                    color = if (playing) AppAccent else Color.White,
+                    color = if (playing) AppAccent else AppText,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 2,
@@ -403,7 +402,7 @@ private fun EpisodeRow(
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = episode.description,
-                        color = Color.White.copy(alpha = 0.65f),
+                        color = AppText.copy(alpha = 0.65f),
                         fontSize = 12.sp,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
@@ -412,9 +411,9 @@ private fun EpisodeRow(
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (finished) {
-                        Text(stringResource(R.string.episode_marked_played), color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+                        Text(stringResource(R.string.episode_marked_played), color = AppText.copy(alpha = 0.6f), fontSize = 12.sp)
                         Spacer(Modifier.width(6.dp))
-                        Text("•", color = Color.White.copy(alpha = 0.4f), fontSize = 12.sp)
+                        Text("•", color = AppText.copy(alpha = 0.4f), fontSize = 12.sp)
                         Spacer(Modifier.width(6.dp))
                     }
                     val started = episode.playedPositionMs > 0 && !finished
@@ -423,7 +422,7 @@ private fun EpisodeRow(
                             date.isBlank() -> minutes
                             else -> "$date • $minutes"
                         },
-                        color = Color.White.copy(alpha = 0.6f),
+                        color = AppText.copy(alpha = 0.6f),
                         fontSize = 12.sp,
                     )
                     if (started) {
@@ -445,7 +444,7 @@ private fun EpisodeRow(
             Icon(
                 Icons.Default.MoreVert,
                 contentDescription = stringResource(R.string.episode_options),
-                tint = Color.White.copy(alpha = 0.8f),
+                tint = AppText.copy(alpha = 0.8f),
                 modifier = Modifier.size(22.dp).pressable(0.9f, onClick = onMenu),
             )
             Spacer(Modifier.weight(1f))
@@ -453,12 +452,12 @@ private fun EpisodeRow(
             Spacer(Modifier.width(6.dp))
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.size(40.dp).clip(CircleShape).background(Color.White).pressable(0.92f, onClick = onPlay),
+                modifier = Modifier.size(40.dp).clip(CircleShape).background(AppText).pressable(0.92f, onClick = onPlay),
             ) {
                 com.music.spotui.ui.components.PlayPauseIcon(
                     playing = playing,
                     contentDescription = stringResource(R.string.episode_play),
-                    tint = Color.Black,
+                    tint = com.music.spotui.ui.theme.AppBackground,
                     modifier = Modifier.size(20.dp),
                 )
             }

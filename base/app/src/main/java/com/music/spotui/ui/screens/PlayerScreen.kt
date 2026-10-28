@@ -80,6 +80,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import com.music.spotui.ui.components.pressable
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.graphicsLayer
@@ -163,11 +164,12 @@ fun PlayerScreen(navController: NavController) {
     val energy by EnergySettings.state.collectAsStateWithLifecycle()
     // Liked state is Spotify's (LibraryAPI), pushed by the engine.
     val isLiked = playerViewModel.likeState
-    var showMenu by remember { mutableStateOf(false) }
-    var showLyrics by remember { mutableStateOf(false) }
+    val titleScope = androidx.compose.runtime.rememberCoroutineScope()
+    var showMenu by rememberSaveable { mutableStateOf(false) }
+    var showLyrics by rememberSaveable { mutableStateOf(false) }
     var showSavedIn by remember { mutableStateOf(false) }
     var showDevices by remember { mutableStateOf(false) }
-    var showQueue by remember { mutableStateOf(false) }
+    var showQueue by rememberSaveable { mutableStateOf(false) }
     // Immersive view (official app: a tap on the artwork): artwork full-bleed, no top bar,
     // no title / controls block, only one compact strip. A second tap leaves it.
     var immersive by remember { mutableStateOf(false) }
@@ -211,7 +213,7 @@ fun PlayerScreen(navController: NavController) {
 
     // Known cover (warmed by the mini player): the colour is there from the first frame.
     var coverColor by remember {
-        mutableStateOf(Palette.cachedSecond(songCoverUri) ?: Color(AppBackground.toArgb()))
+        mutableStateOf(Palette.cachedSecond(songCoverUri) ?: AppBackground)
     }
     LaunchedEffect(songCoverUri) {
         // Known: kept as it is (extracted again it could come out a shade off, and the background
@@ -342,17 +344,19 @@ fun PlayerScreen(navController: NavController) {
         onDispose { mv.detachPlayerScreen() }
     }
     LaunchedEffect(actualTrackId, songTitle, audioBuffering) {
-        if (!audioBuffering) mv.prepare(actualTrackId, songTitle, songSinger, SongPlayer.getDuration())
+        // Settings, "Music videos" off: no lookup, no button, no clip.
+        if (!audioBuffering && com.music.spotui.data.preferences.MusicVideoPref.on) mv.prepare(actualTrackId, songTitle, songSinger, SongPlayer.getDuration())
     }
     val remote = SongPlayer.activeDevice.value != null
     val readyVideo = mv.state.value as? com.music.spotui.video.MusicVideoController.State.Ready
     val videoMatchesTrack = displayedTrackId.isNotBlank() && actualTrackId == displayedTrackId && readyVideo?.trackId == actualTrackId
-    val videoReady = videoMatchesTrack && !remote && !audioBuffering && !com.music.spotui.data.DataSaver.active
+    val videoReady = videoMatchesTrack && !remote && !audioBuffering && !com.music.spotui.data.DataSaver.active &&
+            com.music.spotui.data.preferences.MusicVideoPref.on
     // Switching to mobile data with the data saver on stops a clip that is playing.
     LaunchedEffect(com.music.spotui.data.DataSaver.active) {
         if (com.music.spotui.data.DataSaver.active && mv.on.value) mv.setOn(false)
     }
-    val videoOn = mv.on.value && videoMatchesTrack && !remote
+    val videoOn = mv.on.value && videoMatchesTrack && !remote && com.music.spotui.data.preferences.MusicVideoPref.on
     // Canvas / clip players are built once the sheet has finished rising (then kept):
     // creating them in the first frame stalled it and the slide jumped.
     val settled by com.music.spotui.ui.navigation.LocalPageSettled.current
@@ -548,7 +552,7 @@ fun PlayerScreen(navController: NavController) {
                                 val grow = 1f + (1f - coverAlpha) * 0.06f
                                 scaleX = grow; scaleY = grow
                             },
-                        model = cover,
+                        model = app.myspoti.host.android.Covers.large(cover),
                         contentScale = ContentScale.Crop,
                         contentDescription = "")
                 }
@@ -594,8 +598,21 @@ fun PlayerScreen(navController: NavController) {
                     likeSong = { nowPlayingSong(playerViewModel) },
                     adPlaying = adPlaying,
                     onTitleClick = {
-                        val albumId = np.albumUri.substringAfterLast(":")
-                        if (albumId.isNotBlank()) navController.navigate(albumRoute(playerViewModel.currentSongAlbum.value, songSinger, albumId))
+                        // A radio's tracks may come without their album: asked from the track, else
+                        // by the album's name (the album page resolves it).
+                        val albumId = np.albumUri.substringAfterLast(":").ifBlank { nowPlayingSong(playerViewModel).albumId }
+                        val albumName = playerViewModel.currentSongAlbum.value
+                        if (albumId.isNotBlank()) navController.navigate(albumRoute(albumName, songSinger, albumId))
+                        else {
+                            val trackId = SongPlayer.currentTrackId
+                            titleScope.launch {
+                                val resolved = if (trackId.isBlank()) "" else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    runCatching { app.myspoti.host.android.MyspotiRuntime.api.catalog.track("spotify:track:$trackId").album?.uri }
+                                        .getOrNull()?.substringAfterLast(":").orEmpty()
+                                }
+                                if (resolved.isNotBlank() || albumName.isNotBlank()) navController.navigate(albumRoute(albumName, songSinger, resolved))
+                            }
+                        }
                     },
                     onArtistClick = {
                         playerViewModel.goToArtist(SongPlayer.currentTrackId, songSinger) { route ->
@@ -654,6 +671,10 @@ fun PlayerScreen(navController: NavController) {
                     onDevices = { showDevices = true },
                     onQueue = { showQueue = true },
                 )
+                // Buttons from extensions (player.buttons), under the player's own controls.
+                val extTrack = androidx.compose.runtime.remember(songTitle, songSinger) { com.music.spotui.extensions.Extensions.currentTrack() }
+                com.music.spotui.extensions.MirrorIndicator()
+                com.music.spotui.extensions.ExtensionPlayerButtons(extTrack)
                 // 8dp card margin + this = the official 37dp from the buttons' centre to the card.
                 Spacer(modifier = Modifier.height(12.dp))
             }
@@ -828,7 +849,7 @@ private fun playingFromLabels(np: SongPlayer.NowPlaying, fallbackName: String): 
     val type = np.contextUri.split(":").getOrNull(1).orEmpty()
     val name = contextDisplayName(np, fallbackName)
     return when {
-        np.contextUri.contains(":collection") -> stringResource(R.string.context_type_description_collection_your_library) to stringResource(R.string.collection_liked_songs_title)
+        isLikedContext(np.contextUri) -> stringResource(R.string.context_type_description_collection_your_library) to stringResource(R.string.collection_liked_songs_title)
         type == "playlist" -> stringResource(R.string.context_type_description_playlist) to name
         type == "album" -> stringResource(R.string.context_type_description_album) to name
         type == "artist" -> stringResource(R.string.context_type_description_artist) to name
@@ -838,14 +859,28 @@ private fun playingFromLabels(np: SongPlayer.NowPlaying, fallbackName: String): 
     }
 }
 
-/** Route of the page the music is playing from (playlist, album, artist, liked). */
+/** Spotify's uri of the user's Liked Songs: spotify:collection:tracks, or the older spotify:user:<name>:collection (by one artist: ...:artist:<id>). */
+private val LIKED_CONTEXT = Regex("spotify:(collection(:tracks)?|user:[^:]+:collection(:artist:[^:]+)?)")
+
+/** Only Liked Songs itself, not another collection (episodes) nor a radio that mentions one. */
+private fun isLikedContext(uri: String) = LIKED_CONTEXT.matches(uri)
+
+/**
+ * Route of the page the music is playing from (playlist, album, artist, liked); null when there
+ * is none to open. A radio (spotify:station:...) has no page of its own: it never falls back to
+ * Liked Songs.
+ */
 private fun contextRoute(np: SongPlayer.NowPlaying): String? {
     val parts = np.contextUri.split(":")
     val id = parts.getOrNull(2).orEmpty()
     // B26: opening that page again must carry the name the header shows.
     val name = contextDisplayName(np, "")
     return when {
-        np.contextUri.contains(":collection") -> Routes.Liked.route
+        isLikedContext(np.contextUri) -> Routes.Liked.route
+        parts.getOrNull(1) == "station" -> null
+        // The older form of a playlist's uri: spotify:user:<name>:playlist:<id>.
+        parts.getOrNull(1) == "user" && parts.getOrNull(3) == "playlist" && parts.getOrNull(4).orEmpty().isNotBlank() ->
+            com.music.spotui.ui.navigation.playlistRoute(parts[4], name)
         parts.getOrNull(1) == "playlist" && id.isNotBlank() -> com.music.spotui.ui.navigation.playlistRoute(id, name)
         parts.getOrNull(1) == "album" && id.isNotBlank() -> albumRoute(name, "", id)
         parts.getOrNull(1) == "artist" && id.isNotBlank() -> com.music.spotui.ui.navigation.artistRoute(name, id)
@@ -934,7 +969,7 @@ fun ExplicitBadge(modifier: Modifier = Modifier) {
     ) {
         // No font padding + trimmed line height so the "E" sits dead centre.
         Text(
-            "E",
+            stringResource(R.string.explicit_badge),
             color = Color.Black,
             fontWeight = FontWeight.Bold,
             style = androidx.compose.ui.text.TextStyle(
@@ -957,8 +992,10 @@ fun LikeButton(liked: Boolean, size: androidx.compose.ui.unit.Dp = 28.dp, onClic
     // Nothing runs on first display, so long lists do not animate while scrolling.
     val scale = remember { androidx.compose.animation.core.Animatable(1f) }
     val firstShown = remember { booleanArrayOf(true) }
+    val reduce = com.music.spotui.ui.look.rememberReduceMotion()
     LaunchedEffect(liked) {
         if (firstShown[0]) { firstShown[0] = false; return@LaunchedEffect }
+        if (reduce) return@LaunchedEffect
         scale.snapTo(0.6f)
         scale.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.4f, stiffness = 600f))
     }
@@ -969,13 +1006,25 @@ fun LikeButton(liked: Boolean, size: androidx.compose.ui.unit.Dp = 28.dp, onClic
             interactionSource = remember { MutableInteractionSource() },
             indication = null,
         ) { onClick() }
-    if (liked) {
-        Box(contentAlignment = Alignment.Center, modifier = mod.clip(CircleShape).background(com.music.spotui.ui.theme.AppAccent)) {
-            // The official check is bolder, with round ends.
-            Icon(PlayerIcons.check, contentDescription = stringResource(R.string.remove_from_liked), tint = Color.Black, modifier = Modifier.size(size * 0.7f))
+    // The disc fills and the glyphs cross-fade, instead of one swapping for the other.
+    val disc by androidx.compose.animation.animateColorAsState(
+        if (liked) com.music.spotui.ui.theme.AppAccent else Color.Transparent,
+        if (reduce) androidx.compose.animation.core.snap() else androidx.compose.animation.core.tween(180),
+        label = "likeDisc",
+    )
+    Box(contentAlignment = Alignment.Center, modifier = mod.background(disc, CircleShape)) {
+        androidx.compose.animation.Crossfade(
+            liked,
+            animationSpec = if (reduce) androidx.compose.animation.core.snap() else androidx.compose.animation.core.tween(180),
+            label = "likeGlyph",
+        ) { on ->
+            if (on) {
+                // The official check is bolder, with round ends.
+                Icon(PlayerIcons.check, contentDescription = stringResource(R.string.remove_from_liked), tint = Color.Black, modifier = Modifier.size(size * 0.7f))
+            } else {
+                Icon(painterResource(id = R.drawable.ic_add), contentDescription = stringResource(R.string.aligned_curation_context_menu_item_add_to_liked_songs), tint = Color.White, modifier = Modifier.size(size))
+            }
         }
-    } else {
-        Icon(painterResource(id = R.drawable.ic_add), contentDescription = stringResource(R.string.aligned_curation_context_menu_item_add_to_liked_songs), tint = Color.White, modifier = mod)
     }
 }
 
@@ -1048,9 +1097,9 @@ fun PlayerInfo(
                 )
             }
         }
-        // No like for a local file (not in the Spotify library), and none during an ad break:
-        // the + would save the song from before the break.
-        if (!adPlaying && !com.music.spotui.di.LocalPlayer.active.value) {
+        // No like for a file of the device (not in the Spotify library; an extension's stream or a
+        // download is), and none during an ad break: the + would save the song from before the break.
+        if (!adPlaying && SongPlayer.canLike) {
             if (likeSong != null) AddButton(song = likeSong, liked = liked, onLike = onLikeClick)
             else LikeButton(liked = liked, onClick = onLikeClick)
         }
@@ -1339,16 +1388,31 @@ fun PlayerConnectRow(
                 modifier = Modifier.size(24.dp),
                 contentDescription = stringResource(R.string.mr_user_route_category_name),
             )
-            Text(
-                text = com.music.spotui.ui.components.activeDeviceLabel(),
-                color = com.music.spotui.ui.theme.AppAccent,
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .padding(start = 6.dp)
-                    .widthIn(max = 200.dp),
-            )
+            Column(modifier = Modifier.padding(start = 6.dp).widthIn(max = 220.dp)) {
+                Text(
+                    text = com.music.spotui.ui.components.activeDeviceLabel(),
+                    color = com.music.spotui.ui.theme.AppAccent,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+                // What the sound is when Myspoti's own player plays it (an extension's stream, a
+                // download); a tap opens what plays and its quality.
+                val source = com.music.spotui.ui.components.playingSourceLabel()
+                var quality by remember { mutableStateOf(false) }
+                if (quality) com.music.spotui.ui.components.QualitySheet { quality = false }
+                if (source.isNotBlank()) Text(
+                    text = source,
+                    color = com.music.spotui.ui.theme.AppMuted,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) { quality = true },
+                )
+            }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             var shareMenu by remember { mutableStateOf(false) }

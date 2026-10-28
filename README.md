@@ -4,7 +4,7 @@
 [![License: GPL-3.0](https://img.shields.io/github/license/kota-zo/myspoti)](LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/jXKnGVFnGS)
 
-**Spotify without ads, with downloads, on a free account.** Your own Spotify account, playlists and Wrapped, in a native Android app that blocks the ads and lets you download your music in lossless quality.
+**Spotify without ads, on a free account.** Your own Spotify account, playlists and Wrapped, in a native Android app that blocks the ads, with offline downloads through extensions you install.
 
 <p align="center">
   <img src="docs/screenshots/banner.jpg" alt="Myspoti: home, player, artist and album screens" width="100%">
@@ -24,8 +24,8 @@
 ### 🚫 Spotify with no ads, on a free account
 No audio ads, no video ads, no banners, and no 30-second break between songs. Myspoti switches off the ad breaks of Spotify's own player, so a free account plays like Premium: pick any song, skip as much as you want. No Premium, no modified Spotify app, nothing to root.
 
-### ⬇️ Download your music, in lossless
-Download a song, an album, a playlist or all your Liked Songs, and listen with no connection: on the plane, in the metro, with no data. The audio is better than Spotify's own: **lossless FLAC** (CD quality, or 24-bit hi-res when it exists), or small AAC files if you prefer. Each song is the very same recording, found by its ISRC on Tidal or Qobuz and checked before it is kept (after a one-off verification in Settings). Downloaded playlists stay in step: songs you add on Spotify download by themselves.
+### ⬇️ Offline downloads, through extensions
+Myspoti has no download source of its own. Install a **download-source extension** (Settings, Extensions) and you can download a song, an album, a playlist or all your Liked Songs, and listen with no connection: on the plane, in the metro, with no data. The extension decides where the files come from and in which formats (FLAC, M4A or MP3); Myspoti keeps them encrypted on your phone, refuses a file that is not the song's length, and keeps downloaded playlists in step: songs you add on Spotify download by themselves.
 
 ### ✨ And everything you expect from Spotify, and more
 Your home, search, library, playlists, podcasts, Spotify Connect and Android Auto, plus **word-by-word lyrics**, **official music videos** and **song meanings from Genius**.
@@ -65,13 +65,19 @@ New versions are offered inside the app: one tap downloads and installs them.
 - Share any song, album, artist or playlist as a **Spotify Code** (scannable in the Spotify app) or a link.
 
 **Offline**
-- Download songs, albums, playlists and Liked Songs, in **lossless FLAC** (CD or hi-res) or small AAC. The very recording is found by its ISRC on Tidal or Qobuz and checked before it is kept.
+- With a download-source extension installed: download songs, albums, playlists and Liked Songs, in the formats the extension offers (or re-encoded to small AAC on the phone).
 - Downloads are encrypted and stay in Myspoti. Lists you downloaded stay in step with Spotify.
 - Your local audio files too.
 
+**Extensions**
+- Scripts written by other people, in a sandbox: lyrics from other sources, where a song's audio or download comes from, Home sections, menu entries, tools that use your Spotify account.
+- Installing shows what an extension will do (each action with its author's reason, the critical ones marked) and asks for one tick: you install it on your own responsibility. An extension gets every action it lists, or is not installed; an update that asks for more waits for your OK and shows only what changes.
+- With an audio-source extension on, every song you play (from a list, search, an artist, Recents, a link or shuffle) is asked there first, and plays on Spotify when it has nothing.
+- For authors: [the extensions API](docs/extensions/API.md), and a desktop runner to test without a phone.
+
 **And also**
 - Your recap: your top songs, artists and albums, kept on your phone.
-- 7 languages: English, French, German, Spanish, Italian, Portuguese and Greek.
+- 10 languages: English, French, German, Spanish, Italian, Portuguese, Greek, Russian, Polish and Chinese (Simplified).
 - Data saver, battery saver, AMOLED black, accent colour.
 
 ## New since 1.1
@@ -80,7 +86,7 @@ Version 2.0 is a new app, rebuilt from the ground up.
 
 - 🚀 **A new engine**: faster screens, quicker skips, and playback that recovers by itself when Spotify's player stumbles.
 - 🚫 **Ads stopped at the source** instead of skipped.
-- 🎧 **Lossless downloads** (FLAC, hi-res) instead of YouTube audio, encrypted on your phone.
+- 🎧 **Downloads through extensions** instead of built-in YouTube audio, encrypted on your phone.
 - 🎤 **Word-by-word lyrics**, from more sources, with **Genius song meanings**.
 - 🎬 **Music videos with their own sound**, in full screen, in better quality.
 - 👥 **Collaborative playlists**, an **Add songs** screen, and full playlist editing.
@@ -105,11 +111,11 @@ Every change is in the [changelog](CHANGELOG.md).
 
 **Do downloads count in my Wrapped?** No. Songs played from a download are not reported to Spotify; they count in Myspoti's own recap only. Streamed songs and music videos count as usual.
 
-**What leaves my phone?** Your plays go to Spotify. Lyrics are looked up on lyrics sites, song meanings on Genius, translations on Google Translate, music videos on YouTube, and downloads on the Tidal or Qobuz sources. Nothing is sent to the developer.
+**What leaves my phone?** Your plays go to Spotify. Lyrics are looked up on lyrics sites, song meanings on Genius, translations on Google Translate, music videos on YouTube, and downloads on the hosts your download-source extension names (shown before you install it). Nothing is sent to the developer.
 
 ## Not included
 
-- No DRM circumvention, and no Spotify audio download: offline songs come from lossless catalogues, and a song with no lossless source is marked unavailable.
+- No DRM circumvention, and no Spotify audio download: offline songs come from the download-source extension you install, and a song it has no file for is marked unavailable. Myspoti ships no download source of its own.
 - No ad is ever marked as heard.
 
 ## Disclaimer
@@ -153,9 +159,8 @@ Every push builds and tests on GitHub Actions. A `v*` tag publishes a signed APK
 
 ## Credits
 
-- UI derived from [Spotui](https://github.com/Spotui/Spotui) / [Metrolist](https://github.com/MetrolistGroup/Metrolist) (GPL-3.0); Spotui also gave the Kotlin port of the lossless resolver, the verification screen and the DASH-to-FLAC remux.
-- [SpotiFLAC](https://github.com/spotbye/SpotiFLAC) (MIT): the lossless resolving idea and its community backend protocol.
-- [SpotiFLAC Mobile](https://github.com/zarzet/SpotiFLAC-Mobile) (MIT) and its [extensions](https://github.com/zarzet/SpotiFLAC-Extension) (Apache-2.0): the signed download sessions and the Tidal / Qobuz requests.
+- UI derived from [Spotui](https://github.com/Spotui/Spotui) / [Metrolist](https://github.com/MetrolistGroup/Metrolist) (GPL-3.0); Spotui also gave the DASH-to-FLAC remux.
+- The Immersive look (player, lyrics, queue, glass tab bar and pages) is ported from [BitChord](https://github.com/kushagrasinghx/BitChord) (GPL-3.0-or-later).
 - [NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor) (GPL-3.0): music videos.
 - Lyrics: [LRCLIB](https://lrclib.net), LyricsPlus, lrc.red, Kugou and NetEase; song meanings: [Genius](https://genius.com).
 - [Material Icons](https://github.com/google/material-design-icons) (Apache 2.0) and the [Manrope](https://github.com/googlefonts/manrope) font (SIL OFL 1.1, see `base/licenses/`).
@@ -164,4 +169,7 @@ Full notices: [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## License
 
-GPL-3.0.
+GPL-3.0. If you reuse this code, you must credit Myspoti, keep the license notices and
+publish your complete source under GPL-3.0. Closed-source or uncredited copies are
+violations and will be reported to the hosting platform (DMCA takedown). See also
+[`AGENTS.md`](AGENTS.md).

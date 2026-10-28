@@ -1,5 +1,10 @@
 package com.music.spotui.ui.screens
 
+import com.music.spotui.ui.theme.AppDestructive
+import com.music.spotui.ui.theme.tone
+import com.music.spotui.ui.theme.AppText
+import com.music.spotui.ui.theme.AppMuted
+
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.DriveFileMove
@@ -100,7 +105,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private val Green: Color get() = com.music.spotui.ui.theme.AppAccent
-private val SheetColor = Color(0xFF282828)
+private val SheetColor: androidx.compose.ui.graphics.Color get() = tone(0xFF282828)
 
 /** A name prompt (new playlist / folder, rename). */
 @Composable
@@ -109,13 +114,13 @@ fun NameDialog(title: String, initial: String, confirm: String, onDismiss: () ->
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = SheetColor,
-        title = { Text(title, color = Color.White) },
+        title = { Text(title, color = AppText) },
         text = {
             TextField(
                 value = text, onValueChange = { text = it }, singleLine = true,
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color(0xFF3A3A3A), unfocusedContainerColor = Color(0xFF3A3A3A),
-                    focusedTextColor = Color.White, unfocusedTextColor = Color.White, cursorColor = Green,
+                    focusedContainerColor = tone(0xFF3A3A3A), unfocusedContainerColor = tone(0xFF3A3A3A),
+                    focusedTextColor = AppText, unfocusedTextColor = AppText, cursorColor = Green,
                     focusedIndicatorColor = Green, unfocusedIndicatorColor = Color.Transparent,
                 ),
             )
@@ -124,7 +129,7 @@ fun NameDialog(title: String, initial: String, confirm: String, onDismiss: () ->
             TextButton(enabled = text.isNotBlank(), onClick = { onConfirm(text.trim()) }) { Text(confirm, color = Green) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.add_to_playlist_button_cancel), color = Color.White) }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.add_to_playlist_button_cancel), color = AppText) }
         },
     )
 }
@@ -135,11 +140,11 @@ private fun SheetRow(icon: ImageVector, label: String, detail: String? = null, o
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp).clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 8.dp),
     ) {
-        Icon(icon, null, tint = Color(0xFFB3B3B3), modifier = Modifier.size(26.dp))
+        Icon(icon, null, tint = AppMuted, modifier = Modifier.size(26.dp))
         Spacer(Modifier.width(16.dp))
         Column {
-            Text(label, color = Color.White, fontSize = 16.sp)
-            if (detail != null) Text(detail, color = Color(0xFFB3B3B3), fontSize = 12.sp)
+            Text(label, color = AppText, fontSize = 16.sp)
+            if (detail != null) Text(detail, color = AppMuted, fontSize = 12.sp)
         }
     }
 }
@@ -170,7 +175,7 @@ fun LibraryCreateSheet(navController: NavController, onDismiss: () -> Unit, onLi
             navController.navigate(localPlaylistRoute(p.id))
         }
         "blend" -> BlendSheet(navController, onDismiss)
-        else -> ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
+        else -> com.music.spotui.ui.components.LookSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
             Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
                 SheetRow(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.assisted_curation_search_playlist)) { asking = "playlist" }
                 SheetRow(Icons.Outlined.Group, stringResource(R.string.blend_title), stringResource(R.string.blend_detail)) { asking = "blend" }
@@ -216,11 +221,11 @@ private fun BlendSheet(navController: NavController, onDismiss: () -> Unit) {
             if (opened != null) { onDismiss(); navController.navigate(playlistRoute(opened.substringAfterLast(':'))) }
         }
     }
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
+    com.music.spotui.ui.components.LookSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
-            Text(stringResource(R.string.blend_title), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold,
+            Text(stringResource(R.string.blend_title), color = AppText, fontSize = 18.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(20.dp, 0.dp, 20.dp, 8.dp))
-            if (busy) Text(stringResource(R.string.blend_working), color = Color(0xFFB3B3B3), fontSize = 14.sp, modifier = Modifier.padding(20.dp, 12.dp))
+            if (busy) Text(stringResource(R.string.blend_working), color = AppMuted, fontSize = 14.sp, modifier = Modifier.padding(20.dp, 12.dp))
             else {
                 SheetRow(Icons.Outlined.Share, stringResource(R.string.blend_invite)) {
                     busy = true
@@ -265,7 +270,7 @@ fun BlendInviteSheet(link: com.music.spotui.data.api.InviteLinks.BlendLink, navC
             }
             .onFailure { failed = true }
     }
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
+    com.music.spotui.ui.components.LookSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(24.dp, 0.dp, 24.dp, 20.dp),
@@ -282,14 +287,14 @@ fun BlendInviteSheet(link: com.music.spotui.data.api.InviteLinks.BlendLink, navC
                 joinable && inviter != null -> stringResource(R.string.blend_invited_by, inviter.name)
                 else -> v.title ?: stringResource(R.string.blend_title)
             }
-            Text(title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text(title, color = AppText, fontSize = 20.sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             val detail = when {
                 v == null && !failed -> stringResource(R.string.blend_working)
                 v == null -> null
                 joinable -> stringResource(R.string.blend_detail)
                 else -> v.subtitle
             }
-            if (detail != null) Text(detail, color = Color(0xFFB3B3B3), fontSize = 14.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            if (detail != null) Text(detail, color = AppMuted, fontSize = 14.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 modifier = Modifier.padding(top = 6.dp))
             Spacer(Modifier.height(24.dp))
             if (joinable) androidx.compose.material3.Button(
@@ -317,11 +322,11 @@ fun BlendInviteSheet(link: com.music.spotui.data.api.InviteLinks.BlendLink, navC
                     context.startActivity(android.content.Intent.createChooser(send, null).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
                     onDismiss()
                 },
-                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = AppText, contentColor = com.music.spotui.ui.theme.AppBackground),
                 modifier = Modifier.fillMaxWidth().height(48.dp),
             ) { Text(stringResource(R.string.blend_invite), fontWeight = FontWeight.Bold, fontSize = 16.sp) }
             TextButton(onClick = onDismiss, modifier = Modifier.padding(top = 4.dp)) {
-                Text(stringResource(R.string.blend_later), color = Color.White)
+                Text(stringResource(R.string.blend_later), color = AppText)
             }
         }
     }
@@ -336,15 +341,15 @@ private fun PageHeader(title: String, subtitle: String?, navController: NavContr
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier.size(44.dp).clip(CircleShape).pressable { navController.navigateUp() },
-        ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.accessibility_navigate_back), tint = Color.White) }
+        ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.accessibility_navigate_back), tint = AppText) }
         Column(Modifier.weight(1f).padding(start = 4.dp)) {
-            Text(title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (subtitle != null) Text(subtitle, color = Color(0xFFB3B3B3), fontSize = 13.sp)
+            Text(title, color = AppText, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (subtitle != null) Text(subtitle, color = AppMuted, fontSize = 13.sp)
         }
         if (onMenu != null) Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier.size(44.dp).clip(CircleShape).pressable { onMenu() },
-        ) { Icon(Icons.Default.MoreVert, stringResource(R.string.content_description_context_menu), tint = Color.White) }
+        ) { Icon(Icons.Default.MoreVert, stringResource(R.string.content_description_context_menu), tint = AppText) }
     }
 }
 
@@ -372,7 +377,7 @@ fun FolderScreen(navController: NavController, uri: String, initialName: String)
     }
     // A change just written: the folder is read again once Spotify's list has had time to catch up.
     LaunchedEffect(uri) { com.music.spotui.data.api.LibraryEdits.reloads.collect { generation++ } }
-    if (menu) ModalBottomSheet(onDismissRequest = { menu = false }, containerColor = SheetColor) {
+    if (menu) com.music.spotui.ui.components.LookSheet(onDismissRequest = { menu = false }, containerColor = SheetColor) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
             SheetRow(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.add_to_playlist_new_playlist_button_text)) { menu = false; newPlaylist = true }
             SheetRow(Icons.Outlined.Edit, stringResource(R.string.context_menu_rename_folder)) { menu = false; renaming = true }
@@ -382,16 +387,16 @@ fun FolderScreen(navController: NavController, uri: String, initialName: String)
     if (deletingFolder) androidx.compose.material3.AlertDialog(
         onDismissRequest = { deletingFolder = false },
         containerColor = SheetColor,
-        text = { Text(stringResource(R.string.folder_delete_confirm, name), color = Color.White) },
+        text = { Text(stringResource(R.string.folder_delete_confirm, name), color = AppText) },
         confirmButton = {
             androidx.compose.material3.TextButton(onClick = {
                 deletingFolder = false
                 // The folder is gone from the library at once; a refusal brings it back.
                 LibraryFolders.delete(context, uri)
                 navController.navigateUp()
-            }) { Text(stringResource(R.string.actions_picker_delete), color = Color(0xFFF15E6C)) }
+            }) { Text(stringResource(R.string.actions_picker_delete), color = AppDestructive) }
         },
-        dismissButton = { androidx.compose.material3.TextButton(onClick = { deletingFolder = false }) { Text(stringResource(R.string.cancel), color = Color.White) } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = { deletingFolder = false }) { Text(stringResource(R.string.cancel), color = AppText) } },
     )
     // A Spotify playlist created straight inside this folder.
     if (newPlaylist) NameDialog(stringResource(R.string.create_playlist_content_description), context.getString(R.string.my_playlist),
@@ -438,8 +443,8 @@ private fun LocalItemRow(item: LocalItem, current: Boolean, onClick: () -> Unit)
             modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)),
         )
         Column(Modifier.padding(start = 12.dp).weight(1f)) {
-            Text(item.title, color = if (current) Green else Color.White, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (item.artist.isNotBlank()) Text(item.artist, color = Color(0xFFB3B3B3), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(item.title, color = if (current) Green else AppText, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (item.artist.isNotBlank()) Text(item.artist, color = AppMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -468,7 +473,7 @@ fun LocalPlaylistScreen(navController: NavController, id: String) {
         LaunchedEffect(Unit) { navController.navigateUp() }
         return
     }
-    if (menu) ModalBottomSheet(onDismissRequest = { menu = false }, containerColor = SheetColor) {
+    if (menu) com.music.spotui.ui.components.LookSheet(onDismissRequest = { menu = false }, containerColor = SheetColor) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
             SheetRow(Icons.Outlined.Edit, stringResource(R.string.local_rename)) { menu = false; renaming = true }
             SheetRow(Icons.Outlined.Delete, stringResource(R.string.local_delete_playlist)) {
@@ -484,7 +489,7 @@ fun LocalPlaylistScreen(navController: NavController, id: String) {
         PageHeader(playlist.name, stringResource(R.string.local_playlist_subtitle) + " • " +
             pluralStringResource(R.plurals.add_to_playlist_subtitle_songs_count, playlist.items.size, playlist.items.size.toString()),
             navController) { menu = true }
-        if (playlist.items.isEmpty()) Text(stringResource(R.string.local_playlist_empty), color = Color(0xFFB3B3B3), fontSize = 14.sp,
+        if (playlist.items.isEmpty()) Text(stringResource(R.string.local_playlist_empty), color = AppMuted, fontSize = 14.sp,
             modifier = Modifier.padding(20.dp))
         else LazyColumn(contentPadding = PaddingValues(bottom = com.music.spotui.ui.components.bottomBarsSpace()), modifier = Modifier.fillMaxSize()) {
             item {
@@ -532,12 +537,12 @@ fun AddLocalToPlaylistSheet(track: LocalTrack, onDismiss: () -> Unit) {
         }
         return
     }
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
+    com.music.spotui.ui.components.LookSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
         LazyColumn(Modifier.navigationBarsPadding().heightIn(max = 560.dp)) {
             item {
-                Text(stringResource(R.string.context_menu_add_to_playlist), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                Text(stringResource(R.string.context_menu_add_to_playlist), color = AppText, fontSize = 20.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(20.dp, 4.dp, 20.dp, 4.dp))
-                Text(stringResource(R.string.local_add_note), color = Color(0xFFB3B3B3), fontSize = 12.sp,
+                Text(stringResource(R.string.local_add_note), color = AppMuted, fontSize = 12.sp,
                     modifier = Modifier.padding(20.dp, 0.dp, 20.dp, 8.dp))
                 SheetRow(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.add_to_playlist_new_playlist_button_text),
                     stringResource(R.string.local_playlist_subtitle)) { creating = true }
@@ -572,8 +577,8 @@ private fun PickRow(name: String, detail: String, cover: String?, onClick: () ->
             loading = placeholder(R.drawable.placeholder), failure = placeholder(R.drawable.placeholder),
             modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)))
         Column(Modifier.padding(start = 12.dp)) {
-            Text(name, color = Color.White, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(detail, color = Color(0xFFB3B3B3), fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            Text(name, color = AppText, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(detail, color = AppMuted, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         }
     }
 }
@@ -590,6 +595,7 @@ fun LibraryItemSheet(entry: LibraryEntry, onDismiss: () -> Unit, onChanged: () -
     val context = LocalContext.current
     var moving by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
+    var merging by remember { mutableStateOf(false) }
     // The change shows in the list at once and is written in the app's own scope (the sheet is
     // closed by then); a refusal puts the list back and says so.
     fun act(edit: LibraryEdits.Edit, block: suspend () -> Unit) {
@@ -597,15 +603,18 @@ fun LibraryItemSheet(entry: LibraryEntry, onDismiss: () -> Unit, onChanged: () -
         onDismiss()
     }
     val api = app.myspoti.host.android.MyspotiRuntime.api
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
+    com.music.spotui.ui.components.LookSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
-            Text(entry.name, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            Text(entry.name, color = AppText, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 modifier = Modifier.padding(20.dp, 0.dp, 20.dp, 8.dp))
             if (!moving) {
                 SheetRow(Icons.Outlined.PushPin, stringResource(if (entry.pinned) R.string.library_unpin else R.string.library_pin)) {
                     act(LibraryEdits.Pin(entry.uri, !entry.pinned)) { if (entry.pinned) api.library.unpin(entry.uri) else api.library.pin(entry.uri) }
                 }
                 if (entry.isPlaylist || entry.isFolder) SheetRow(Icons.Outlined.DriveFileMove, stringResource(R.string.library_move_to_folder)) { moving = true }
+                // A saved playlist or album: all its songs into another playlist of yours.
+                if (entry.uri.startsWith("spotify:playlist:") || entry.uri.startsWith("spotify:album:"))
+                    SheetRow(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.context_menu_add_to_playlist)) { merging = true }
                 if (entry.isFolder) SheetRow(Icons.Outlined.Delete, stringResource(R.string.folder_delete)) { deleting = true }
             } else {
                 val folders by androidx.compose.runtime.produceState<List<app.myspoti.api.LibraryItem>?>(null) {
@@ -619,15 +628,16 @@ fun LibraryItemSheet(entry: LibraryEntry, onDismiss: () -> Unit, onChanged: () -
             }
         }
     }
+    if (merging) com.music.spotui.ui.components.AddCollectionToPlaylistSheet(entry.uri, entry.name) { merging = false; onDismiss() }
     if (deleting) androidx.compose.material3.AlertDialog(
         onDismissRequest = { deleting = false },
         containerColor = SheetColor,
-        text = { Text(stringResource(R.string.folder_delete_confirm, entry.name), color = Color.White) },
+        text = { Text(stringResource(R.string.folder_delete_confirm, entry.name), color = AppText) },
         confirmButton = {
             androidx.compose.material3.TextButton(onClick = { deleting = false; act(LibraryEdits.Remove(entry.uri)) { api.library.deleteFolder(entry.uri) } }) {
-                Text(stringResource(R.string.actions_picker_delete), color = Color(0xFFF15E6C))
+                Text(stringResource(R.string.actions_picker_delete), color = AppDestructive)
             }
         },
-        dismissButton = { androidx.compose.material3.TextButton(onClick = { deleting = false }) { Text(stringResource(R.string.cancel), color = Color.White) } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = { deleting = false }) { Text(stringResource(R.string.cancel), color = AppText) } },
     )
 }

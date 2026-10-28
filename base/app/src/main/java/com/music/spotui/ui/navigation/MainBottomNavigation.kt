@@ -1,5 +1,9 @@
 package com.music.spotui.ui.navigation
 
+import com.music.spotui.ui.theme.AppText
+import com.music.spotui.ui.theme.AppMuted
+import com.music.spotui.ui.theme.AppShade
+
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.compose.ui.res.stringResource
 import app.myspoti.engine.R
@@ -100,8 +104,7 @@ fun MainBottomNavigation(navController: NavHostController, bottomBarState: Mutab
     // Visibility follows the screen actually shown (not flags each screen sets,
     // which raced during transitions and left the mini player over the full one).
     val shownRoute = navController.currentBackStackEntryAsState().value?.destination?.route
-    // The SpotiFLAC verification too: under the bar its retry and skip buttons were out of reach.
-    val fullScreen = shownRoute == Routes.Player.route || shownRoute == Routes.Queue.route || shownRoute == Routes.Spotiflac.route
+    val fullScreen = shownRoute == Routes.Player.route || shownRoute == Routes.Queue.route
     val hasTrack = com.music.spotui.di.Graph.currentSongState.title.value.isNotBlank()
     // No motion of its own: the bar sits above the pages, so sliding it while the
     // player rises (or collapses behind it) made one gesture look like two.
@@ -116,14 +119,14 @@ fun MainBottomNavigation(navController: NavHostController, bottomBarState: Mutab
                     .fillMaxWidth()
                     // Settings, Display: the fade over the list (the default), or solid black (from #15).
                     .then(
-                        if (com.music.spotui.data.preferences.SolidNavBar.on) Modifier.background(Color.Black)
+                        if (com.music.spotui.data.preferences.SolidNavBar.on) Modifier.background(AppShade)
                         // Like the official bar: clear above the mini player, near-opaque by the tab icons,
                         // so covers scrolling underneath never compete with the labels.
                         else Modifier.background(Brush.verticalGradient(
                             0f to Color.Transparent,
-                            0.3f to Color.Black.copy(alpha = 0.7f),
-                            0.6f to Color.Black.copy(alpha = 0.92f),
-                            1f to Color.Black,
+                            0.3f to AppShade.copy(alpha = 0.7f),
+                            0.6f to AppShade.copy(alpha = 0.92f),
+                            1f to AppShade,
                         ))
                     )
             ) {
@@ -217,7 +220,7 @@ private fun RowScope.NavBarTab(
     onClick: () -> Unit,
 ) {
     // Spotify's idle grey, lighter than Color.Gray which read as "disabled".
-    val tint = if (selected) Color.White else Color(0xFFB3B3B3)
+    val tint = if (selected) AppText else AppMuted
     Box(
         modifier = Modifier
             .weight(1f)

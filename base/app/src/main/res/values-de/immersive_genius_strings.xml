@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="immersive_genius_none">Genius hat nichts zu diesem Titel.</string>
+    <string name="immersive_genius_error">Genius ist gerade nicht erreichbar.</string>
+    <string name="immersive_genius_view">Auf Genius ansehen</string>
+</resources>

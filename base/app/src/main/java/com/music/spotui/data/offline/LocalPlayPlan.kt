@@ -4,7 +4,7 @@ package com.music.spotui.data.offline
  * Whether a song picked in a list plays from the phone (the downloaded file) or from the Web Player.
  *
  * Offline, or with the data saver on mobile data, the Web Player cannot stream: the list's
- * downloaded songs play. Online, a downloaded song also plays from its file (the lossless one
+ * downloaded songs play. Online, a downloaded song also plays from its file (the one
  * the user chose to keep) as long as the whole list is on the phone: the local queue holds only
  * downloaded songs, so a list that is only partly downloaded would lose the others, and it keeps
  * streaming from Spotify's own queue.

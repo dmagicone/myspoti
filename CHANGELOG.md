@@ -2,6 +2,84 @@
 
 Each release on GitHub shows its section below. The app shows it too when it offers the update. Every detail: [docs/CHANGELOG-full.md](docs/CHANGELOG-full.md).
 
+## 2.1.0
+
+The first stable release since 2.0.1, with everything from the 2.0.2 betas (their notes are below) and more.
+
+- ✨ **New Immersive look** (optional, Apple-Music-like): Liquid Glass bars that fold away when you scroll, animated player and lyrics, glass sheets, and its own pages for albums, folders, local playlists, extensions and podcast episodes. Switch in Settings, Display; Classic stays the default. Each look keeps its own **accent colour** and shows only its own settings.
+- 🧩 **Extensions**: audio and download sources are extensions now, ordered as you like with Spotify among them, found on GitHub, GitLab and Codeberg. Safer: public hosts only, new permissions need your OK, a crash no longer takes the app down.
+- 📱 **Spotify Connect with extension sources**: when an extension plays a Spotify song, the phone stays a Connect device. The official Spotify apps and your other devices see it and control it, and the song counts on Spotify through a real muted play at low quality. Turn it off in Settings if you prefer to save data and battery.
+- 📊 **Plays count on Spotify**, Recents included. **Listening stats** and **friend activity**.
+- 👥 **Collaborative playlists**: leave one, or manage it as the owner.
+- 🚫 **Fewer "Spotify refused to play this"** (402) and no songs skipping on their own; better ad blocking (more ad hosts, ads found by their metadata, reloads that stay silent).
+- 🔀 **Shuffle in Immersive** goes through shuffle, smart shuffle and off, as in Classic.
+- 🔎 **A song played from search** goes on with related songs, no longer with your Liked Songs.
+- 📻 **Radios**: the playing-from header and the song title open the right page and album.
+- 👋 **New onboarding**: how Myspoti works, then what extensions are and where to find them (shown once after the update too).
+- 👆 **Easier taps**: wider back and profile buttons, and the glass bars no longer let taps through to the page.
+- 🎧 **Headphones and car**: 15 s skips for podcasts, Android Auto that keeps playing, background playback that keeps running.
+- ⚡ **Faster and lighter**: pages and Liked Songs kept on the phone, cached lyrics and searches, a smaller image cache, smoother lists and animations, Remove animations honoured everywhere.
+- 🌍 **More languages**: Chinese, Russian, Polish, Turkish, Indonesian, and Spanish for Argentina and Mexico.
+
+## 2.0.2-beta.8
+
+- 🎚️ **Source order** (Settings, Playback and Downloads): put your audio and download sources in the order you want; each song is asked from top to bottom. Spotify has its own place too, first if you like. Each source shows only what matters, details on a tap. Installing a second source no longer clashes with the first.
+- 🔄 **Updates**: a Check now button in Settings, About, and the app looks more often (at most once an hour, again 10 min after a failed check).
+- 💎 **Liquid Glass** on the top bar of every tab, with a rounded bottom; the blur follows tab changes live. Fixes going back from a playlist that stayed on the playlist.
+- ↕️ **Immersive queue**: a dropped song goes straight to its place, without jumping back first.
+- 🎙️ **Podcasts**: the headphone next and previous buttons skip 15 s forward and back (Settings, Playback).
+- 📖 **Genius** song meanings in the Immersive look.
+- 🔒 **Safer extensions**: network calls limited to public hosts, an update that asks for more needs your OK, Spotify writes granted one by one, an extension crash no longer takes the app down.
+- 🌍 More texts translated.
+
+## 2.0.2-beta.7
+
+- 💎 **Real Liquid Glass** (Immersive): lens refraction, specular rim and a live blur of what scrolls behind, now also on phones with system window blurs off (Android 13+; live blur on Android 12). Softer springs and press feedback across the look.
+- ⏭️ **Songs skipping on their own**: when Spotify drops several songs in a row, the app stops and tells you instead of chaining through your queue. Diagnostic reports now say why every song changed.
+- ↕️ **Immersive queue**: dragged songs stay where you drop them, move between "Next in queue" and "Next from", and the list scrolls at the edges.
+- 🖼️ **Sharp covers in Immersive** after opening the lyrics.
+- 🎨 **Accent colour** now applies to the Immersive look; no more click sound in its full-screen player; lyrics follow the song after a skip.
+- ⏮️ **Previous** goes back a song instead of restarting it when tapped right after a skip.
+- 🔁 **Reopening the app** brings back the song from an extension or a download, its queue and position.
+- ✖️ **Clear button** in search fields.
+
+## 2.0.2-beta.6
+
+- 🔔 **Update popup fixed**: it shows as soon as the app knows about the update, a stray tap no longer closes it, and after "Later" the update stays in Settings, About.
+- 🗂️ **Settings in tabs** (classic look): Playback, Downloads, Appearance, Extensions, About. About shows your version and the update when there is one.
+- 🧩 **Extensions**: Refresh really refreshes now (no stale cache, real errors, update check of installed extensions). Extensions are also found and installed from **GitLab** and **Codeberg** (topic `myspoti-extension`). Uninstall an extension right from the list (trash icon), which now also clears its sign-in and cache.
+- 🚗 **Android Auto**: playback started from the car no longer stops after a few seconds, and the car's buttons keep working.
+- 🔀 **Real crossfade** for songs played from extensions, downloads and device files (Settings, Playback). Spotify streams keep their fade out and in.
+- 🖼️ **Sharp covers everywhere**: notification, lock screen, Android Auto, share card. Fixes a crash at playback start (#77).
+- ✨ **Immersive look**: drag songs to reorder the queue, and the "playing from" source line is no longer cut off.
+
+## 2.0.2-beta.5
+
+- ✨ **New Immersive look** (optional, Apple-Music-like): glass tab bar and mini player that fold away when you scroll, animated player and lyrics, grouped Settings, glass sheets (Spotify Connect, queue, quality…). Offered at the first open after the update; switch any time in Settings, Display. Classic stays the default.
+- 🎤 **Lyrics** (Immersive): the new line loses its blur the moment it becomes current.
+- 🖼️ **Sharp covers** in the player: the large image instead of a stretched thumbnail.
+- 🎧 **Background playback**: the player keeps running when you switch apps or turn the screen off.
+- 🚫 **"Spotify refused to play this" (402)**: commands sent like the browser's, a Chromium network retry after a refusal, and no more ghost copy of this phone among your devices. Still refused? Please send a diagnostic report from this version: it now opens with a short summary of the cause.
+- ⏭️ **No more songs skipping on their own** when Spotify limits audio licences: the app waits instead of asking again.
+- 🧹 **Lighter diagnostic reports**: a third shorter, without the repeated lines.
+
+## 2.0.2-beta.4
+
+- 🧩 **Download sources are extensions now**: the app no longer carries any download source. Install a download-source extension (Settings, Extensions) and downloads work as before: checked, encrypted, kept in Myspoti. Without one, downloads say so.
+- 🔌 **For extension authors**: the `download-source` hook, `playback` events (start, progress, pause, resume, seek, skip, end) and `spotify.raw.request` (docs/extensions/API.md).
+- 📊 **Plays now count on Spotify**: once the device is registered, the play reports (melody) leave from the app itself.
+- 👥 **Collaborative playlists, owner side**: remove someone as a collaborator or from the playlist, or stop the collab (with a warning). Invitation links stay valid until they expire.
+- 💾 **No save button** on your own playlists.
+- ➕ **Add a playlist or album to another playlist**, with the choice of what to do about duplicates.
+- 🗂️ **Library filter chips**: playlists, artists, albums, songs.
+- 🌍 **Chinese, Russian and Polish**.
+- 📈 **Listening stats**: top artists and tracks (4 weeks, 6 months, year), minutes per week counted on the phone, a "your #N artist" badge, and **friend activity**.
+- 🎬 **Music videos**: a switch to turn them off, and **picture-in-picture** for clips.
+- 🎧 **Songs played by an audio-source extension**: the player shows which extension plays and the quality it announces, the song shows at once with its large cover, lyrics, Canvas and like button, and the queue works as with Spotify (Play next, Add to queue, the song's radio after the last song). A song no extension has plays on Spotify instead of being skipped, and the next one goes back to the extension.
+- ⚡ **Faster starts with extensions**: the next song is prepared during the current one, and a source that is slow or down is left sooner.
+- 🩺 **Extensions say whether their source answers**: one that does not is shown inactive and skipped until it answers again. The extensions screens are simpler.
+- 📴 **Likes and additions made offline** are sent when the network is back.
+
 ## 2.0.2-beta.3
 
 - 👋 **Leave a collaborative playlist** you joined, from the playlist's menu, like on the web player.

@@ -1,0 +1,19 @@
+{
+  "id": "app.myspoti.samples.blocks",
+  "name": "Blocks demo (sample)",
+  "version": "1.0.0",
+  "versionCode": 1,
+  "author": "Myspoti",
+  "description": "A sample that adds one block of each kind: a Home section, a search result, a menu entry, a player button, a line under the credits and a small page.",
+  "category": "player",
+  "actions": [
+    { "name": "home.sections", "why": "Shows a 'Played here' section at the end of Home" },
+    { "name": "search.provide", "why": "Adds a hint under the search results" },
+    { "name": "menu.items", "why": "Adds 'Count a play' to song menus" },
+    { "name": "player.buttons", "why": "Adds a counter button under the player" },
+    { "name": "trackinfo.provide", "why": "Shows how often you counted the song in its credits" },
+    { "name": "webview.page", "why": "A small page listing what you counted" },
+    { "name": "storage", "why": "Remembers the counts on this phone" },
+    { "name": "notify", "why": "Says when a play was counted" }
+  ]
+}

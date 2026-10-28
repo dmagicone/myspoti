@@ -212,7 +212,9 @@ private fun shareLyrics(context: Context, title: String, artist: String, line: S
 
 @Composable
 private fun rememberLyricsState(vm: LyricsViewModel, title: String, artist: String): LyricsViewModel.State {
-    LaunchedEffect(title, artist, SongPlayer.currentTrackId) {
+    // currentTrackId is plain data, not Compose state: the playing item's uri re-runs the load on a skip.
+    val playingUri = SongPlayer.nowPlaying.value.uri
+    LaunchedEffect(title, artist, playingUri, SongPlayer.currentTrackId) {
         SongPlayer.currentLyricsTrack()?.let { vm.load(it) }
     }
     return vm.state.collectAsState().value
@@ -838,7 +840,7 @@ private val CARD_CORNER = 12.dp
  * revealed through a window that grows from the inline card's bounds (position, size, corner
  * radius, same colour) to the whole page, while its lines rise in staggered; closing plays
  * it backwards into the card. Only graphicsLayer / draw state moves per frame, no recomposition.
- * Without a visible card (swipe-up open, card scrolled away) it slides up as it always did.
+ * Without a visible card (scrolled away) it slides up as it always did.
  */
 @Composable
 fun LyricsOverlay(
@@ -854,6 +856,8 @@ fun LyricsOverlay(
     // Window the container starts from, in this host's pixels; null = slide-up fallback.
     var from by remember { mutableStateOf<Rect?>(null) }
     val host = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    // "Remove animations": the lyrics are there, or gone, at once.
+    val reduce = com.music.spotui.ui.look.rememberReduceMotion()
 
     fun cardRect(): Rect? {
         val h = host[0]?.takeIf { it.isAttached } ?: return null
@@ -870,12 +874,12 @@ fun LyricsOverlay(
             from = cardRect()
             mounted = true
             val spec = if (from != null) tween<Float>(560, easing = FastOutSlowInEasing) else tween(250, easing = EaseOut)
-            progress.animateTo(1f, spec)
+            if (reduce) progress.snapTo(1f) else progress.animateTo(1f, spec)
         } else if (mounted) {
             // Fold into the card where it is now; a slide-up opening slides back down.
             if (from != null) cardRect()?.let { from = it }
             val spec = if (from != null) tween<Float>(470, easing = FastOutSlowInEasing) else tween(200, easing = EaseOut)
-            progress.animateTo(0f, spec)
+            if (reduce) progress.snapTo(0f) else progress.animateTo(0f, spec)
             mounted = false
         }
     }

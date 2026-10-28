@@ -75,13 +75,15 @@ import kotlinx.coroutines.delay
  * the rest of the UI. Only the [active] surface receives the frames.
  */
 @Composable
-fun VideoSurface(modifier: Modifier = Modifier, active: Boolean = true, fitHeight: Boolean = false, onTap: (() -> Unit)? = null) {
+fun VideoSurface(modifier: Modifier = Modifier, active: Boolean = true, fitHeight: Boolean = false, pip: Boolean = false, onTap: (() -> Unit)? = null) {
     val ratio = MusicVideoController.aspect.floatValue.coerceIn(0.4f, 3f)
     var view by remember { mutableStateOf<android.view.TextureView?>(null) }
     val player = MusicVideoController.player
-    DisposableEffect(player, view, active) {
+    // In the picture-in-picture window only its own surface shows the clip; outside it, never that one.
+    val mine = pip == MusicVideoController.inPip.value
+    DisposableEffect(player, view, active, mine) {
         val v = view
-        val attached = player != null && v != null && active
+        val attached = player != null && v != null && active && mine
         if (attached) { player!!.setVideoTextureView(v); MusicVideoController.surfaces++ }
         onDispose {
             if (attached) MusicVideoController.surfaces--
@@ -299,5 +301,13 @@ private fun RoundIcon(icon: Int, description: String, sizeDp: Int, flip: Boolean
             painterResource(icon), contentDescription = description, tint = Color.White,
             modifier = Modifier.size(sizeDp.dp).graphicsLayer { if (flip) scaleX = -1f },
         )
+    }
+}
+
+/** What the picture-in-picture window shows: the clip alone, centred on black. */
+@Composable
+fun PipVideo() {
+    Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+        VideoSurface(fitHeight = true, pip = true)
     }
 }

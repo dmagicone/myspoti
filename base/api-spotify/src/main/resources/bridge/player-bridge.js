@@ -27,6 +27,21 @@
     return;
   }
 
+  // The page always sees itself visible: a hidden page has its timers and rendering throttled,
+  // and the engine runs with the app in the background (the host already tells Chromium the view
+  // is shown). Nothing in this bridge reads the page's visibility.
+  try {
+    Object.defineProperty(Document.prototype, 'hidden', { configurable: true, get: () => false });
+    Object.defineProperty(Document.prototype, 'visibilityState', { configurable: true, get: () => 'visible' });
+    Object.defineProperty(Document.prototype, 'webkitHidden', { configurable: true, get: () => false });
+    Object.defineProperty(Document.prototype, 'webkitVisibilityState', { configurable: true, get: () => 'visible' });
+    document.hasFocus = () => true;
+    for (const t of ['visibilitychange', 'webkitvisibilitychange']) {
+      document.addEventListener(t, e => e.stopImmediatePropagation(), true);
+      window.addEventListener(t, e => e.stopImmediatePropagation(), true);
+    }
+  } catch (e) { /* keep the real values */ }
+
   const VERSION = 1;
   const READY_TIMEOUT_MS = 60000;
 
@@ -434,14 +449,14 @@
     // level: the element's volume (0..1), which local fades move; own: the level the page
     // player itself wants there. playerVolume: what the page player itself is set to, read
     // here too so the host's periodic volume check costs no second call.
-    // -> {paused, muted, volume, level, own, time, readyState, ended, playerVolume, active} | null (no element yet)
+    // -> {paused, muted, volume, level, own, time, readyState, networkState, error, keys, ended, playerVolume, active} | null (no element yet)
     'media.state': async () => {
       const player = await localPlayer();
       const el = player && player._player;
       if (!(el instanceof HTMLMediaElement)) return null;
       let playerVolume = null;
       try { playerVolume = await need().playback.getVolume(); } catch (e) { /* unknown */ }
-      return { paused: el.paused, muted: el.muted, volume: el.volume, level: el.volume, own: ownLevel(player), time: el.currentTime, readyState: el.readyState, ended: el.ended, playerVolume, active: await activeDevice() };
+      return { paused: el.paused, muted: el.muted, volume: el.volume, level: el.volume, own: ownLevel(player), time: el.currentTime, readyState: el.readyState, networkState: el.networkState, error: el.error ? el.error.code + ':' + String(el.error.message || '').slice(0, 80) : null, keys: el.mediaKeys ? 1 : 0, ended: el.ended, playerVolume, active: await activeDevice() };
     },
     // The media element's volume, on this phone only: no Spotify Connect command (refused on
     // some accounts, slow on a busy network) and nothing reported to Spotify, as the player's

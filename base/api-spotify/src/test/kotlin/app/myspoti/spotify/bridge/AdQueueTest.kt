@@ -86,4 +86,56 @@ class AdQueueTest {
     }
 
     @Test fun `an unreadable reply is left alone`() = assertNull(AdBlock.withoutAds("""{"x":"AD" """))
+
+    // ── Ads flagged by their metadata only, and songs that merely look like ads ──
+
+    private fun raw(json: String) = json
+
+    /** A track typed TRACK whose metadata alone says what it is. */
+    private fun flagged(name: String, meta: String) =
+        """{"content_type":"TRACK","metadata":{"uri":"spotify:track:${name.replace(' ', '-')}","name":"$name"$meta},"manifest":{}}"""
+
+    private fun firstShapeWith(ad: String) = reply(
+        listOf(raw(ad), track("TRACK", "Before"), track("TRACK", "Playing"), track("TRACK", "After")),
+        listOf(state(0), state(1), state(2, advance = 0, next = 4, show = 4), state(2), state(3)),
+        current = 2,
+    )
+
+    @Test fun `an ad flagged only by is_advertisement, an ad uri or an ad_id is left out too`() {
+        val marked = listOf(
+            flagged("Promo", ""","is_advertisement":"true""""),
+            """{"content_type":"TRACK","metadata":{"uri":"spotify:ad:123","name":"Promo"},"manifest":{}}""",
+            flagged("Promo", ""","ad_id":"abc123""""),
+        )
+        for (ad in marked) {
+            val (body, notes) = AdBlock.withoutAds(firstShapeWith(ad))!!
+            assertEquals(4, index(transitions(body, 2), "advance"), ad)
+            assertEquals(listOf("advance after Playing: After instead of an ad"), notes)
+        }
+    }
+
+    @Test fun `a song that only looks like an ad is never left out`() {
+        val songs = listOf(
+            flagged("AD", ""),
+            flagged("Bad Ad", ""","album_title":"Ad Astra""""),
+            flagged("Ads", ""","is_advertisement":"false""""),
+            flagged("Adagio", ""","ad_id":"""""),
+            """{"content_type":"TRACK","metadata":{"uri":"spotify:track:adadadad","name":"spotify:ad: in a title"},"manifest":{}}""",
+        )
+        for (song in songs) {
+            val body = firstShapeWith(song)
+            assertNull(AdBlock.withoutAds(body), song)
+            assertNull(AdBlock.adAhead(body), song)
+            assertTrue(!AdBlock.isAdTrack(Json.parseToJsonElement(song).jsonObject), song)
+        }
+    }
+
+    @Test fun `why an ad was kept is told`() {
+        val playing = reply(listOf(track("AD", "An ad"), track("TRACK", "B")), listOf(state(0), state(1)), current = 0)
+        assertEquals("AD: the ad is the current song", AdBlock.whyKept(playing))
+        assertEquals("AD: the song before the ad has no other way on (its skip leads to the ad too)", AdBlock.whyKept(second))
+        val notAnAd = firstShapeWith(flagged("Ads", ""","is_advertisement":"false""""))
+        assertEquals("is_advertisement: no ad track (the marker is elsewhere in the reply)", AdBlock.whyKept(notAnAd))
+        assertNull(AdBlock.whyKept(reply(listOf(track("TRACK", "A")), listOf(state(0)), current = 0)))
+    }
 }

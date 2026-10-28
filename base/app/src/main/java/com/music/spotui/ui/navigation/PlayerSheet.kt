@@ -73,17 +73,19 @@ fun PlayerOverlay(navController: NavController) {
     val progress = remember { Animatable(0f) }
     var shown by remember { mutableStateOf(false) }
     val settled = remember { mutableStateOf(false) }
+    // "Remove animations": the player is there, or gone, at once.
+    val reduce = com.music.spotui.ui.look.rememberReduceMotion()
     LaunchedEffect(open) {
         if (open) {
             shown = true
             settled.value = false
             // Two frames for the player's first composition and layout before the clock runs.
             if (progress.value == 0f) { withFrameNanos { }; withFrameNanos { } }
-            progress.animateTo(1f, tween(OPEN_MS, easing = Decelerate))
+            if (reduce) progress.snapTo(1f) else progress.animateTo(1f, tween(OPEN_MS, easing = Decelerate))
             settled.value = true
         } else if (shown) {
             settled.value = false
-            progress.animateTo(0f, tween(CLOSE_MS, easing = CloseEasing))
+            if (reduce) progress.snapTo(0f) else progress.animateTo(0f, tween(CLOSE_MS, easing = CloseEasing))
             shown = false
         }
     }
@@ -103,10 +105,13 @@ fun PlayerOverlay(navController: NavController) {
         CompositionLocalProvider(LocalPageSettled provides settled, LocalPlayerReveal provides reveal) {
             // A podcast episode gets the podcast player (±15 s, speed, sleep timer, no shuffle);
             // everything else keeps the music player.
-            if (com.music.spotui.di.SongPlayer.isEpisode) {
-                com.music.spotui.ui.screens.PodcastPlayerScreen(navController)
-            } else {
-                PlayerScreen(navController)
+            // The player's bare texts use the body style as it is (no app-wide letter spacing).
+            androidx.compose.material3.ProvideTextStyle(com.music.spotui.ui.theme.Typography.bodyLarge) {
+                if (com.music.spotui.di.SongPlayer.isEpisode) {
+                    com.music.spotui.ui.screens.PodcastPlayerScreen(navController)
+                } else {
+                    PlayerScreen(navController)
+                }
             }
         }
     }

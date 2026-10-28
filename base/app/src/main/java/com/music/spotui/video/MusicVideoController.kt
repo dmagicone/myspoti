@@ -72,6 +72,8 @@ object MusicVideoController {
     /** The user switched to the video for this track. */
     val on = mutableStateOf(false)
     val fullscreen = mutableStateOf(false)
+    /** The activity is in its picture-in-picture window: the clip's surface is the window's own. */
+    val inPip = mutableStateOf(false)
     /** width / height of the playing video. */
     val aspect = mutableFloatStateOf(16f / 9f)
 
@@ -235,7 +237,7 @@ object MusicVideoController {
 
     /** Resolve and cache a track's video in the background, without touching the UI state. */
     fun prefetch(trackId: String, title: String, artist: String, durationMs: Long) {
-        if (com.music.spotui.data.DataSaver.active || !appVisible || !EnergySettings.state.value.policy.allowBackgroundLookups || trackId.isBlank() || trackId == currentTrackId) return
+        if (com.music.spotui.data.DataSaver.active || !com.music.spotui.data.preferences.MusicVideoPref.on || !appVisible || !EnergySettings.state.value.policy.allowBackgroundLookups || trackId.isBlank() || trackId == currentTrackId) return
         if (trackId == settledId && SystemClock.elapsedRealtime() < settledUntil) return
         // Already answered (or failed a moment ago): nothing to look up, nothing to read.
         if (recentAnswer(trackId) != null || SystemClock.elapsedRealtime() < (failedUntil[trackId] ?: 0L)) return
@@ -290,7 +292,7 @@ object MusicVideoController {
     /** Find (or load) the video of the track now playing. Disk access stays on IO. */
     fun prepare(trackId: String, title: String, artist: String, durationMs: Long) {
         // Data saver on mobile data: no look-up (it downloads audio) and no video stream.
-        if (trackId.isBlank() || !appVisible || com.music.spotui.data.DataSaver.active) return
+        if (trackId.isBlank() || !appVisible || com.music.spotui.data.DataSaver.active || !com.music.spotui.data.preferences.MusicVideoPref.on) return
         currentTitle = title; currentArtist = artist; currentDuration = durationMs
         if (trackId == currentTrackId && (state.value !is State.Idle || SystemClock.elapsedRealtime() < nextPrepareAt)) return
         if (currentTrackId != trackId) { errorRetryUsedFor = null; nextPrepareAt = 0L }
@@ -866,7 +868,9 @@ object MusicVideoController {
                 // Clip sound: the song goes unheard only while the clip is really playing with its
                 // sound; buffering, paused, an ad or anything else, the song is heard again at once.
                 val sounding = shown && clipSound.value && warmedFor?.endsWith(SOUND_KEY) == true &&
-                    p.isPlaying && SongPlayer.currentTrackId == currentTrackId && !SongPlayer.adPlaying
+                    p.isPlaying && SongPlayer.currentTrackId == currentTrackId && !SongPlayer.adPlaying &&
+                    // The extension's own sound plays, not the engine's: nothing to hush.
+                    !com.music.spotui.di.LocalPlayer.active.value
                 hush(sounding)
                 p.volume = if (hushed) 1f else 0f
                 if (!shown) {

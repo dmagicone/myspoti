@@ -65,6 +65,42 @@ object ListenHistory {
         val topAlbums: List<Ranked>,
     )
 
+    /** One calendar week of listening: its first day (local midnight, epoch ms) and the minutes played in it. */
+    data class Week(val startMs: Long, val minutes: Long)
+
+    /** Minutes per week over the last [weeks] calendar weeks, oldest first, the current week last. */
+    fun weekly(weeks: Int = 8, nowMs: Long = System.currentTimeMillis()): List<Week> = weekly(all(), weeks, nowMs)
+
+    /**
+     * Groups [listens] by calendar week (weeks start on the locale's first day, in [zone]); the
+     * current, unfinished week is last. Weeks without listens count 0.
+     */
+    fun weekly(
+        listens: List<Listen>,
+        weeks: Int,
+        nowMs: Long,
+        zone: java.util.TimeZone = java.util.TimeZone.getDefault(),
+        firstDayOfWeek: Int = java.util.Calendar.getInstance().firstDayOfWeek,
+    ): List<Week> {
+        val cal = java.util.Calendar.getInstance(zone).apply {
+            this.firstDayOfWeek = firstDayOfWeek
+            timeInMillis = nowMs
+            set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+            while (get(java.util.Calendar.DAY_OF_WEEK) != firstDayOfWeek) add(java.util.Calendar.DAY_OF_MONTH, -1)
+        }
+        // Week starts, newest first; calendar arithmetic keeps daylight-saving weeks right.
+        val starts = (0 until weeks).map { i ->
+            if (i > 0) cal.add(java.util.Calendar.WEEK_OF_YEAR, -1)
+            cal.timeInMillis
+        }.reversed()
+        val ends = starts.drop(1) + Long.MAX_VALUE
+        return starts.indices.map { i ->
+            val ms = listens.filter { it.atMs >= starts[i] && it.atMs < ends[i] && it.atMs <= nowMs }.sumOf { it.playedMs }
+            Week(starts[i], ms / 60_000)
+        }
+    }
+
     /** Totals and top lists for listens since [sinceMs]. */
     fun recap(sinceMs: Long): Recap {
         val list = all().filter { it.atMs >= sinceMs }

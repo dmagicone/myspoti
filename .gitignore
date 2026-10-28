@@ -4,6 +4,7 @@ build/
 .kotlin/
 *.apk
 *.zip
+*.log
 dist/
 local.properties
 # device captures (logs can contain session data)

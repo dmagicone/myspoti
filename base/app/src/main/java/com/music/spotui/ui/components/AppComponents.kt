@@ -1,5 +1,8 @@
 package com.music.spotui.ui.components
 
+import com.music.spotui.ui.theme.tone
+import com.music.spotui.ui.theme.AppText
+
 import androidx.compose.ui.res.stringResource
 
 import androidx.compose.foundation.layout.Spacer
@@ -46,6 +49,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -89,8 +93,8 @@ fun Loader(kind: SkeletonKind = SkeletonKind.List) {
             .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
         if (!visible) return@Column
-        val tile = Color(0xFF242424)
-        val line = Color(0xFF2A2A2A)
+        val tile = tone(0xFF242424)
+        val line = tone(0xFF2A2A2A)
         when (kind) {
             SkeletonKind.Home -> {
                 repeat(4) {
@@ -131,10 +135,10 @@ fun SkeletonList(count: Int = 6, round: Boolean = false, modifier: Modifier = Mo
         if (!visible) return@Column
         if (round) repeat(count) {
             Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(48.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Color(0xFF242424)))
-                Box(Modifier.padding(start = 12.dp).width(150.dp).height(14.dp).clip(RoundedCornerShape(4.dp)).background(Color(0xFF2A2A2A)))
+                Box(Modifier.size(48.dp).clip(androidx.compose.foundation.shape.CircleShape).background(tone(0xFF242424)))
+                Box(Modifier.padding(start = 12.dp).width(150.dp).height(14.dp).clip(RoundedCornerShape(4.dp)).background(tone(0xFF2A2A2A)))
             }
-        } else SkeletonRows(Color(0xFF242424), Color(0xFF2A2A2A), count)
+        } else SkeletonRows(tone(0xFF242424), tone(0xFF2A2A2A), count)
     }
 }
 
@@ -310,6 +314,14 @@ fun MiniPlayer(navController: NavHostController) {
                                     maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                     modifier = Modifier.weight(1f, fill = false),
                                 )
+                                // The extension the sound comes from, discreet, as the output's name.
+                                playingExtensionName()?.let { name ->
+                                    Text(
+                                        text = " · $name", color = Color.White.copy(alpha = 0.55f), fontSize = 11.sp,
+                                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                        modifier = Modifier.widthIn(max = 110.dp),
+                                    )
+                                }
                                 if (routeLabel != null) {
                                     Icon(
                                         imageVector = if (route.kind == AudioRoute.Kind.BLUETOOTH) Icons.Filled.BluetoothAudio else Icons.Filled.Headphones,
@@ -358,7 +370,7 @@ fun MiniPlayer(navController: NavHostController) {
                 contentDescription = stringResource(R.string.mr_user_route_category_name),
             )
             Spacer(modifier = Modifier.width(20.dp))
-            if (!com.music.spotui.di.LocalPlayer.active.value) com.music.spotui.ui.screens.AddButton(song = { com.music.spotui.ui.screens.nowPlayingSong(vm) }, liked = liked, size = 24.dp) { vm.updateLikeState(true) }
+            if (SongPlayer.canLike) com.music.spotui.ui.screens.AddButton(song = { com.music.spotui.ui.screens.nowPlayingSong(vm) }, liked = liked, size = 24.dp) { vm.updateLikeState(true) }
             Spacer(modifier = Modifier.width(20.dp))
             com.music.spotui.ui.components.PlayPauseIcon(
                 playing = songPlayingState,
@@ -434,13 +446,13 @@ fun Snackbar(showMessage : String) {
             .fillMaxWidth()
             .height(48.dp)
             .clip(RoundedCornerShape(4.dp))
-            .background(Color.White),
+            .background(AppText),
         contentAlignment = Alignment.Center
     ){
         Text(
             fontWeight = FontWeight.W500,
             fontSize = 14.sp,
-            color = Color.Black,
+            color = com.music.spotui.ui.theme.AppBackground,
             text = showMessage
         )
     }

@@ -4,7 +4,7 @@ import android.util.Log
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import com.music.spotui.data.entity.SongsModel
-import com.music.spotui.data.preferences.isLosslessEnabled
+import com.music.spotui.data.preferences.isDownloadsEnabled
 import com.music.spotui.di.Graph
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -38,7 +38,7 @@ internal fun episodeKeyOf(song: SongsModel) = song.url.takeIf { isEpisodeKey(it)
 
 /**
  * Downloads podcast episodes for offline listening — a separate path from
- * [OfflineDownloader], which is the lossless/SpotiFLAC one.
+ * [OfflineDownloader], which is the songs' one (download-source extensions).
  *
  * Spotify never hands out an episode's audio in GraphQL: the Web Player asks
  * `soundfinder/v1/unauth/episode/<id>/com.widevine.alpha`, which returns either the
@@ -119,7 +119,7 @@ object PodcastDownloader {
         if (episodeKeyOf(song) == null) return
         val req = Request.of(song)
         // "Downloads" off in Settings means no downloads at all, podcasts included.
-        if (!isLosslessEnabled(Graph.app)) {
+        if (!isDownloadsEnabled(Graph.app)) {
             toast(app.myspoti.engine.R.string.downloads_off_toast)
             return
         }
@@ -295,7 +295,7 @@ object PodcastDownloader {
             connectTimeout = 20_000
             readTimeout = 20_000
             instanceFollowRedirects = true
-            setRequestProperty("User-Agent", OfflineDownloader.LosslessUa)
+            setRequestProperty("User-Agent", OfflineDownloader.DownloadUa)
             setRequestProperty("Accept", "*/*")
         }
         try {
@@ -312,7 +312,7 @@ object PodcastDownloader {
             connectTimeout = 15_000
             readTimeout = 30_000
             instanceFollowRedirects = true
-            setRequestProperty("User-Agent", OfflineDownloader.LosslessUa)
+            setRequestProperty("User-Agent", OfflineDownloader.DownloadUa)
         }
         try {
             if (conn.responseCode !in 200..299) return

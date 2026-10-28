@@ -1,5 +1,9 @@
 package com.music.spotui.ui.components
 
+import com.music.spotui.ui.theme.tone
+import com.music.spotui.ui.theme.AppText
+import com.music.spotui.ui.theme.AppMuted
+
 import androidx.compose.ui.res.stringResource
 import app.myspoti.engine.R
 
@@ -92,7 +96,7 @@ import com.music.spotui.di.SongPlayer
 import com.music.spotui.ui.screens.ExplicitBadge
 
 private val Green: Color get() = com.music.spotui.ui.theme.AppAccent
-private val SheetColor = Color(0xFF282828)
+private val SheetColor: androidx.compose.ui.graphics.Color get() = tone(0xFF282828)
 
 /**
  * Name of the output playing now: the Connect device, else the headphones this phone
@@ -122,6 +126,31 @@ fun activeDeviceIcon(): ImageVector {
     }
 }
 
+/**
+ * Where the sound comes from while Myspoti's own player plays a song (an extension's stream: its
+ * name and the quality it announced; a download), shown under the output device; "" when Spotify
+ * plays (a song it plays for want of the extensions included) or while a song is being asked for.
+ */
+@Composable
+fun playingSourceLabel(): String {
+    val uri = SongPlayer.nowPlaying.value.uri
+    val answers = com.music.spotui.extensions.ExtensionAudio.answers.intValue
+    val downloaded = stringResource(R.string.player_source_downloaded)
+    if (!com.music.spotui.di.LocalPlayer.active.value || SongPlayer.routing) return ""
+    return remember(uri, answers, downloaded) {
+        com.music.spotui.di.LocalPlayer.current()?.let { com.music.spotui.extensions.ExtensionAudio.sourceLabel(it, downloaded) }.orEmpty()
+    }
+}
+
+/** The name of the extension streaming the song playing, for the mini player; null otherwise (see [playingSourceLabel]). */
+@Composable
+fun playingExtensionName(): String? {
+    val uri = SongPlayer.nowPlaying.value.uri
+    val answers = com.music.spotui.extensions.ExtensionAudio.answers.intValue
+    if (!com.music.spotui.di.LocalPlayer.active.value || SongPlayer.routing) return null
+    return remember(uri, answers) { com.music.spotui.di.LocalPlayer.current()?.let(com.music.spotui.extensions.ExtensionAudio::streamedBy) }
+}
+
 private fun deviceIcon(type: String): ImageVector = when (type.uppercase()) {
     "SMARTPHONE", "TABLET" -> Icons.Default.Smartphone
     "SPEAKER", "AVR", "STB", "AUDIO_DONGLE" -> Icons.Default.Speaker
@@ -142,22 +171,22 @@ fun DevicesSheet(onDismiss: () -> Unit) {
     val route = rememberAudioRoute()
     val headphones = remote == null && route.kind != AudioRoute.Kind.SPEAKER
     if (quality) QualitySheet(onDismiss = { quality = false })
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
+    com.music.spotui.ui.components.LookSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
         Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 16.dp)) {
             Text(
                 stringResource(R.string.listen_on),
-                color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold,
+                color = AppText, fontSize = 22.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
             )
             // The output playing now, the song, and its quality (tap: what plays, and change it).
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
-                    .clip(RoundedCornerShape(16.dp)).background(Color(0xFF333333)).padding(16.dp),
+                    .clip(RoundedCornerShape(16.dp)).background(tone(0xFF333333)).padding(16.dp),
             ) {
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(activeDeviceLabel(), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                        Text(activeDeviceLabel(), color = AppText, fontSize = 20.sp, fontWeight = FontWeight.Bold,
                             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                         if (remote == null) Text(
                             stringResource(streamingLabel(com.music.spotui.data.preferences.getStreamingQuality(context, com.music.spotui.data.DataSaver.metered))),
@@ -209,14 +238,14 @@ fun DevicesSheet(onDismiss: () -> Unit) {
                     DeviceRow(deviceIcon(d.type), d.name, null) { SongPlayer.transferTo(d); onDismiss() }
                 }
                 if (list.none { !it.isSelf } && !headphones && remote == null)
-                    Text(stringResource(R.string.no_devices), color = Color.White.copy(alpha = 0.7f), modifier = Modifier.padding(20.dp))
+                    Text(stringResource(R.string.no_devices), color = AppText.copy(alpha = 0.7f), modifier = Modifier.padding(20.dp))
             }
             JamSection(onDismiss)
             // Bluetooth: pair or pick headphones and speakers in the system settings.
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)
-                    .clip(RoundedCornerShape(12.dp)).background(Color(0xFF333333))
+                    .clip(RoundedCornerShape(12.dp)).background(tone(0xFF333333))
                     .clickable { AudioRoute.openBluetooth(context) }.padding(14.dp),
             ) {
                 Icon(Icons.Default.Bluetooth, null, tint = Green, modifier = Modifier.size(26.dp))
@@ -232,11 +261,11 @@ private fun DeviceRow(icon: ImageVector, name: String, detail: String?, current:
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 14.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = if (current) Green else Color.White, modifier = Modifier.size(28.dp))
+        Icon(icon, contentDescription = null, tint = if (current) Green else AppText, modifier = Modifier.size(28.dp))
         Spacer(Modifier.width(16.dp))
         Column {
-            Text(name, color = if (current) Green else Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-            if (detail != null) Text(detail, color = Color(0xFFB3B3B3), fontSize = 13.sp)
+            Text(name, color = if (current) Green else AppText, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+            if (detail != null) Text(detail, color = AppMuted, fontSize = 13.sp)
         }
     }
 }
@@ -248,24 +277,28 @@ private fun streamingLabel(q: com.music.spotui.data.preferences.StreamingQuality
     com.music.spotui.data.preferences.StreamingQuality.HIGH -> R.string.quality_streaming_high
 }
 
-/** The sound quality page: what plays now (codec and bitrate, or the downloaded file), and the setting. */
+/** The sound quality page: what plays now (codec and bitrate, the downloaded file, or what an extension announced), and the setting. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun QualitySheet(onDismiss: () -> Unit) {
+fun QualitySheet(onDismiss: () -> Unit) {
     val local = com.music.spotui.di.LocalPlayer.active.value
     val now by androidx.compose.runtime.produceState<String?>(null) {
         value = if (local) {
             val t = com.music.spotui.di.LocalPlayer.current()
             val file = t?.let { com.music.spotui.data.offline.OfflineStore.byLocalId(it.id) }
-            file?.let { "${it.file.substringAfterLast('.').uppercase()} · ${it.source}" } ?: ""
+            file?.let { "${it.file.substringAfterLast('.').uppercase()} · ${it.source}" }
+                // A stream an extension gives: the quality it announced, as it said it.
+                ?: t?.uri?.takeIf { it.scheme == com.music.spotui.extensions.ExtensionAudio.SCHEME }
+                    ?.let { com.music.spotui.extensions.ExtensionAudio.qualityOf(it.lastPathSegment.orEmpty()) }
+                ?: ""
         } else {
             val (bitrate, mime) = app.myspoti.host.android.MyspotiRuntime.spotify.player.audioInfo()
             if (bitrate <= 0) "" else "${codecName(mime)} · ${bitrate / 1000} kbit/s"
         }
     }
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
+    com.music.spotui.ui.components.LookSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 16.dp)) {
-            Text(stringResource(R.string.quality_sheet_title), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+            Text(stringResource(R.string.quality_sheet_title), color = AppText, fontSize = 20.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
             val text = now
             Text(
@@ -304,11 +337,11 @@ private fun JamSection(onDismiss: () -> Unit) {
     }
     fun failed() = android.widget.Toast.makeText(context, context.getString(R.string.jam_failed), android.widget.Toast.LENGTH_SHORT).show()
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
-        Text(stringResource(R.string.jam_title), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.jam_title), color = AppText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         val s = session
         if (s != null) {
             Text(stringResource(R.string.jam_members, s.members.size), color = Green, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
-            Text(stringResource(R.string.jam_invite), color = Color.White, fontSize = 15.sp,
+            Text(stringResource(R.string.jam_invite), color = AppText, fontSize = 15.sp,
                 modifier = Modifier.fillMaxWidth().clickable {
                     scope.launch {
                         val url = runCatching { jam.inviteLink() }.getOrNull() ?: return@launch failed()
@@ -316,7 +349,7 @@ private fun JamSection(onDismiss: () -> Unit) {
                         context.startActivity(android.content.Intent.createChooser(send, null).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
                     }
                 }.padding(vertical = 10.dp))
-            Text(stringResource(R.string.jam_leave), color = Color.White, fontSize = 15.sp,
+            Text(stringResource(R.string.jam_leave), color = AppText, fontSize = 15.sp,
                 modifier = Modifier.fillMaxWidth().clickable {
                     scope.launch { runCatching { if (s.isHost) jam.end() else jam.leave() }; onDismiss() }
                 }.padding(vertical = 10.dp))
@@ -383,11 +416,11 @@ private object JamLinks {
 @Composable
 fun SleepTimerSheet(onDismiss: () -> Unit) {
     val active = SongPlayer.sleepEndsAt.value != null
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
+    com.music.spotui.ui.components.LookSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
         Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 16.dp)) {
             Text(
                 stringResource(R.string.context_menu_sleep_timer),
-                color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                color = AppText, fontSize = 20.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
             )
             val endOfTrack = stringResource(R.string.context_menu_sleep_timer_end_of_track)
@@ -399,7 +432,7 @@ fun SleepTimerSheet(onDismiss: () -> Unit) {
             options.forEach { (label, minutes) ->
                 Text(
                     label,
-                    color = Color.White, fontSize = 16.sp,
+                    color = AppText, fontSize = 16.sp,
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { SongPlayer.setSleepTimer(minutes); onDismiss() }
@@ -443,7 +476,7 @@ fun QueueSheet(contextName: String, onDismiss: () -> Unit) {
     // through this state.
     val listState = rememberLazyListState()
 
-    ModalBottomSheet(
+    com.music.spotui.ui.components.LookSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = SheetColor,
@@ -451,10 +484,10 @@ fun QueueSheet(contextName: String, onDismiss: () -> Unit) {
         Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.92f).navigationBarsPadding()) {
             Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.action_queue_label), color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.action_queue_label), color = AppText, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     if (contextName.isNotBlank()) Row(modifier = Modifier.padding(top = 4.dp)) {
-                        Text(stringResource(R.string.playing_on), color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
-                        Text(contextName, color = Color.White, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(stringResource(R.string.playing_on), color = AppText.copy(alpha = 0.7f), fontSize = 14.sp)
+                        Text(contextName, color = AppText, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)) {
                         Icon(activeDeviceIcon(), contentDescription = null, tint = Green, modifier = Modifier.size(16.dp))
@@ -473,13 +506,13 @@ fun QueueSheet(contextName: String, onDismiss: () -> Unit) {
                                 modifier = Modifier
                                     .size(36.dp)
                                     .clip(CircleShape)
-                                    .background(Color.White)
+                                    .background(AppText)
                                     .clickable { if (playing) SongPlayer.pause() else SongPlayer.play() },
                             ) {
                                 Icon(
                                     if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
                                     contentDescription = if (playing) stringResource(R.string.content_description_pause_button) else stringResource(R.string.content_description_play_button),
-                                    tint = Color.Black, modifier = Modifier.size(22.dp),
+                                    tint = com.music.spotui.ui.theme.AppBackground, modifier = Modifier.size(22.dp),
                                 )
                             }
                         }, onClick = {})
@@ -512,10 +545,10 @@ private fun PillButton(label: String, onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
         modifier = Modifier
             .clip(RoundedCornerShape(50))
-            .background(Color(0xFF3E3E3E))
+            .background(tone(0xFF3E3E3E))
             .clickable(onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 8.dp),
-    ) { Text(label, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
+    ) { Text(label, color = AppText, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
 }
 
 private val QueueHeaderHeight = 48.dp
@@ -758,7 +791,7 @@ private fun QueueList(
                     }
                     if (e.queuedSection) Text(
                         stringResource(R.string.clear_queue),
-                        color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                        color = AppText, fontSize = 13.sp, fontWeight = FontWeight.Bold,
                         modifier = Modifier
                             .padding(end = 20.dp)
                             .clickable {
@@ -774,7 +807,7 @@ private fun QueueList(
                         modifier = Modifier
                             .graphicsLayer { translationY = if (isDragged) dragOffset else 0f }
                             .zIndex(if (isDragged) 1f else 0f)
-                            .background(if (isDragged) Color(0xFF3A3A3A) else SheetColor)
+                            .background(if (isDragged) tone(0xFF3A3A3A) else SheetColor)
                     ) {
                         SwipeLeftToRemove(enabled = !editing && dragging == null, onRemove = {
                             if (e.queued) queued = queued - item else nextUp = nextUp - item
@@ -784,7 +817,7 @@ private fun QueueList(
                                 if (editing) Icon(
                                     Icons.Default.RemoveCircleOutline,
                                     contentDescription = stringResource(R.string.aligned_curation_first_save_default_row_remove_action_description),
-                                    tint = Color.White.copy(alpha = 0.8f),
+                                    tint = AppText.copy(alpha = 0.8f),
                                     modifier = Modifier
                                         .padding(end = 12.dp)
                                         .size(24.dp)
@@ -797,7 +830,7 @@ private fun QueueList(
                                 Icon(
                                     Icons.Default.DragHandle,
                                     contentDescription = stringResource(R.string.edit_playlist_items_move_chip),
-                                    tint = Color.White.copy(alpha = 0.8f),
+                                    tint = AppText.copy(alpha = 0.8f),
                                     modifier = Modifier
                                         .size(28.dp)
                                         .pointerInput(item.uid + item.uri) {
@@ -847,7 +880,7 @@ private fun SwipeLeftToRemove(enabled: Boolean, onRemove: () -> Unit, content: @
             contentAlignment = Alignment.CenterEnd,
             modifier = Modifier.matchParentSize().background(if (armed) Color(0xFFE22134) else Color(0xFF7A1F1F)),
         ) {
-            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.aligned_curation_first_save_default_row_remove_action_description), tint = Color.White, modifier = Modifier.padding(end = 24.dp).size(24.dp))
+            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.aligned_curation_first_save_default_row_remove_action_description), tint = AppText, modifier = Modifier.padding(end = 24.dp).size(24.dp))
         }
         Box(
             modifier = Modifier
@@ -879,7 +912,7 @@ private fun SwipeLeftToRemove(enabled: Boolean, onRemove: () -> Unit, content: @
 @Composable
 private fun SheetHeader(text: String) {
     Text(
-        text, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold,
+        text, color = AppText, fontSize = 15.sp, fontWeight = FontWeight.Bold,
         modifier = Modifier.padding(horizontal = 20.dp),
     )
 }
@@ -933,7 +966,7 @@ private fun QueueSheetRow(
                     Spacer(Modifier.width(4.dp))
                 }
                 Text(
-                    song.title, color = if (current) Green else Color.White, fontSize = 16.sp,
+                    song.title, color = if (current) Green else AppText, fontSize = 16.sp,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
@@ -941,13 +974,13 @@ private fun QueueSheetRow(
                 // Mixed in by smart shuffle: marked, as in the official app, not taken for one of the playlist's songs.
                 if (rec) { Icon(Icons.Outlined.AutoAwesome, contentDescription = stringResource(R.string.smart_shuffle_recommended), tint = Green, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(4.dp)) }
                 if (song.explicit) { ExplicitBadge(); Spacer(Modifier.width(6.dp)) }
-                Text(song.singer, color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(song.singer, color = AppText.copy(alpha = 0.7f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         if (rec) Icon(
             Icons.Outlined.AddCircleOutline,
             contentDescription = stringResource(R.string.smart_shuffle_add),
-            tint = Color.White,
+            tint = AppText,
             modifier = Modifier.padding(end = 12.dp).size(26.dp).clip(CircleShape).clickable { com.music.spotui.ui.screens.SmartShuffle.keep(context, song) },
         )
         trailing()
@@ -960,12 +993,12 @@ private fun QueueAction(icon: ImageVector, label: String, active: Boolean, modif
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFF3E3E3E))
+            .background(tone(0xFF3E3E3E))
             .clickable(onClick = onClick)
             .padding(vertical = 10.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = if (active) Green else Color.White, modifier = Modifier.size(26.dp))
+        Icon(icon, contentDescription = null, tint = if (active) Green else AppText, modifier = Modifier.size(26.dp))
         Spacer(Modifier.height(4.dp))
-        Text(label, color = if (active) Green else Color.White, fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        Text(label, color = if (active) Green else AppText, fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
     }
 }

@@ -1,5 +1,7 @@
 package com.music.spotui.ui.components
 
+import com.music.spotui.ui.theme.AppText
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -46,7 +48,7 @@ fun ProfileAvatar(url: String?, name: String?, size: Dp, modifier: Modifier = Mo
     val letter = label.firstOrNull()?.uppercaseChar()
     val color = Color(AVATAR_COLORS[(label.hashCode() and Int.MAX_VALUE) % AVATAR_COLORS.size])
     Box(modifier.size(size).clip(CircleShape).background(color), contentAlignment = Alignment.Center) {
-        if (letter != null) Text(letter.toString(), color = Color.White, fontSize = (size.value * 0.42f).sp, fontWeight = FontWeight.Bold)
-        else Icon(Icons.Filled.Person, contentDescription = null, tint = Color.White, modifier = Modifier.size(size * 0.55f))
+        if (letter != null) Text(letter.toString(), color = AppText, fontSize = (size.value * 0.42f).sp, fontWeight = FontWeight.Bold)
+        else Icon(Icons.Filled.Person, contentDescription = null, tint = AppText, modifier = Modifier.size(size * 0.55f))
     }
 }

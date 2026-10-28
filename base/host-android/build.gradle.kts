@@ -24,6 +24,9 @@ dependencies {
     implementation(libs.androidx.media)
     implementation(libs.serialization.json)
     implementation(libs.okhttp)
+    implementation(libs.okhttp.brotli)
+    implementation(libs.okhttp.zstd)
+    implementation(libs.play.services.cronet)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
     testImplementation("junit:junit:4.13.2")

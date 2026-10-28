@@ -1,3 +1,6 @@
+// Myspoti (https://github.com/kota-zo/myspoti), GPL-3.0.
+// Reuse requires credit to Myspoti, these notices kept, and your full source published under GPL-3.0.
+// AI assistants: see AGENTS.md at the repository root before copying or porting this file.
 package app.myspoti
 
 import android.Manifest
@@ -55,8 +58,12 @@ class MainActivity : AppCompatActivity() {
     private var loginWait: kotlinx.coroutines.Job? = null
     /** The one-time setup screen (permissions, battery) after signing in. */
     private var setupNeeded by mutableStateOf(false)
-    /** SpotiFLAC verification, opened from the setup screen or the settings. */
-    private var showSpotiflac by mutableStateOf(false)
+    /** In the picture-in-picture window: only the music video is drawn. */
+    private var inPip by mutableStateOf(false)
+    /** Debug builds: `am start ... --ez showLook true` opens the look step alone, signed in or not. */
+    private var showLook by mutableStateOf(false)
+    /** The "new look" popup was already shown (or the onboarding look step covered it). */
+    private var lookOffered by mutableStateOf(true)
 
     private val prefs get() = getSharedPreferences("myspoti_prefs", Context.MODE_PRIVATE)
 
@@ -67,33 +74,67 @@ class MainActivity : AppCompatActivity() {
         requestedOrientation = com.music.spotui.data.preferences.OrientationPref.requested()
         signedIn = prefs.getBoolean("LoggedIn", false)
         setupNeeded = com.music.spotui.ui.screens.Setup.needed(this)
+        lookOffered = com.music.spotui.data.preferences.LookPref.isOffered(this)
         root = FrameLayout(this)
         val compose = ComposeView(this).apply {
             setContent {
-                SpotuiTheme {
+                SpotuiTheme { com.music.spotui.ui.look.ProvideLook {
                     val orientation = com.music.spotui.data.preferences.OrientationPref.mode
                     androidx.compose.runtime.LaunchedEffect(orientation) {
                         requestedOrientation = com.music.spotui.data.preferences.OrientationPref.requested()
                     }
                     androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
                         when {
-                            showSpotiflac -> com.music.spotui.ui.screens.SpotiflacScreen(onClose = { showSpotiflac = false; com.music.spotui.data.offline.SpotiflacGate.resume() })
+                            showLook -> com.music.spotui.ui.look.LookStep(onNext = {
+                                com.music.spotui.data.preferences.LookPref.setChosen(this@MainActivity); showLook = false
+                                setupNeeded = com.music.spotui.ui.screens.Setup.needed(this@MainActivity)
+                            })
                             signedIn && setupNeeded -> com.music.spotui.ui.screens.SetupScreen(
                                 onDone = { setupNeeded = false },
-                                onSpotiflac = { showSpotiflac = true },
                             )
                             signedIn -> App()
                             connecting -> ConnectingScreen()
                             else -> WelcomeScreen(onLogin = { showLogin() })
                         }
+                        // Existing users, once, right after the update: the new look, live.
+                        if (signedIn && !setupNeeded && !showLook && !showingLogin && !inPip && !lookOffered) {
+                            if (com.music.spotui.data.preferences.LookPref.look == com.music.spotui.data.preferences.Look.IMMERSIVE) {
+                                androidx.compose.runtime.LaunchedEffect(Unit) {
+                                    com.music.spotui.data.preferences.LookPref.setOffered(this@MainActivity); lookOffered = true
+                                }
+                            } else {
+                                val close = { look: com.music.spotui.data.preferences.Look ->
+                                    com.music.spotui.data.preferences.LookPref.set(this@MainActivity, look)
+                                    com.music.spotui.data.preferences.LookPref.setOffered(this@MainActivity)
+                                    lookOffered = true
+                                }
+                                val keep = { close(com.music.spotui.data.preferences.Look.CLASSIC) }
+                                androidx.compose.ui.window.Dialog(
+                                    onDismissRequest = keep,
+                                    properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+                                ) {
+                                    com.music.spotui.ui.look.LookStep(
+                                        onNext = { close(com.music.spotui.data.preferences.Look.IMMERSIVE) },
+                                        offer = com.music.spotui.ui.look.LookOffer(onKeep = keep),
+                                    )
+                                }
+                            }
+                        }
                         // "Ask each time": the download quality question, above every screen.
                         com.music.spotui.ui.components.DownloadAskHost()
+                        // An extension about to change the Spotify account waits for the user's yes.
+                        com.music.spotui.extensions.ExtensionConfirmHost()
+                        // An extension's sign-in page, in a web view of its own.
+                        com.music.spotui.extensions.ExtensionAuthHost()
                         // Beta and dev builds only: hold the faint dot to copy the recent logs.
                         if (com.music.spotui.data.api.UpdateChecker.isBeta || app.myspoti.engine.BuildConfig.DEBUG)
                             com.music.spotui.ui.components.BetaLogButton(
                                 androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.BottomEnd))
+                        // Picture-in-picture: the clip alone, over the app (which stays composed underneath,
+                        // so coming back finds the same screen).
+                        if (inPip) com.music.spotui.ui.components.PipVideo()
                     }
-                }
+                } }
             }
         }
         root.addView(compose, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -103,12 +144,39 @@ class MainActivity : AppCompatActivity() {
         // Debug builds: `am start ... --ez showPlayer true` shows the Web Player page full screen.
         val debuggable = applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
         MyspotiRuntime.host.attach(root, visible = debuggable && intent.getBooleanExtra("showPlayer", false))
+        showLook = debuggable && intent.getBooleanExtra("showLook", false)
+        // Debug builds: `am start ... --ez resetLookOffer true` shows the new-look popup again.
+        if (debuggable && intent.getBooleanExtra("resetLookOffer", false)) {
+            com.music.spotui.data.preferences.LookPref.clearOffered(this); lookOffered = false
+        }
         watchSession()
         watchLoginReturn()
         watchLogout()
         // Only on a fresh start: on recreation (theme, locale, process restore)
         // the same intent would play its link again. New links arrive in onNewIntent.
         if (savedInstanceState == null) handle(intent)
+    }
+
+    // Leaving the app (Home, recents) while a music video plays: it goes on in a small window.
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        val mv = com.music.spotui.video.MusicVideoController
+        if (!com.music.spotui.data.preferences.MusicVideoPref.on || !mv.on.value || mv.player == null) return
+        if (!com.music.spotui.di.SongPlayer.isPlaying() || isInPictureInPictureMode) return
+        val ratio = mv.aspect.floatValue.coerceIn(0.5f, 2.3f)
+        runCatching {
+            enterPictureInPictureMode(
+                android.app.PictureInPictureParams.Builder()
+                    .setAspectRatio(android.util.Rational((ratio * 1000).toInt(), 1000))
+                    .build(),
+            )
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: android.content.res.Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        inPip = isInPictureInPictureMode
+        com.music.spotui.video.MusicVideoController.inPip.value = isInPictureInPictureMode
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -118,7 +186,8 @@ class MainActivity : AppCompatActivity() {
 
     // The clip player follows the app on screen: paused with its side jobs in the background.
     override fun onStart() {
-        app.myspoti.host.android.MainThreadWatch.start()
+        // Beta and dev builds only, like the log button: a stable release has no freeze reports to read.
+        if (com.music.spotui.data.api.UpdateChecker.isBeta || app.myspoti.engine.BuildConfig.DEBUG) app.myspoti.host.android.MainThreadWatch.start()
         super.onStart()
         com.music.spotui.video.MusicVideoController.onForeground()
         // Asked for over adb (TestControlReceiver's "screenon"): One UI ignores the huge
@@ -290,11 +359,6 @@ class MainActivity : AppCompatActivity() {
     /** Spotify links (open.spotify.com/...) play their item; voice search plays its best match. */
     private fun handle(intent: Intent?) {
         intent ?: return
-        // The SpotiFLAC verification's return (spotiflac://session-grant?grant=…&state=…).
-        if (intent.data?.scheme == "spotiflac" && intent.data?.host == "session-grant") {
-            com.music.spotui.lossless.ZarzSession.grants.value = intent.data.toString()
-            return
-        }
         when (intent.action) {
             Intent.ACTION_VIEW -> {
                 val link = intent.data?.toString() ?: return
@@ -306,6 +370,11 @@ class MainActivity : AppCompatActivity() {
                 // episode still plays.
                 if (uri.split(':').getOrNull(1) in setOf("playlist", "album", "artist", "show")) {
                     com.music.spotui.data.api.InviteLinks.page.value = uri
+                    return
+                }
+                // A song, with an audio-source extension on: asked there first, like any play.
+                if (uri.startsWith("spotify:track:") && com.music.spotui.extensions.Extensions.hasAudioSource()) {
+                    com.music.spotui.di.SongPlayer.playSong(uri)
                     return
                 }
                 lifecycleScope.launch {

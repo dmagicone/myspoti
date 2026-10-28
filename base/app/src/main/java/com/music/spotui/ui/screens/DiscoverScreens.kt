@@ -1,5 +1,10 @@
 package com.music.spotui.ui.screens
 
+import com.music.spotui.ui.components.wideClickable
+import com.music.spotui.ui.theme.tone
+import com.music.spotui.ui.theme.AppText
+import com.music.spotui.ui.theme.AppMuted
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -60,7 +65,7 @@ import com.music.spotui.ui.navigation.albumRoute
 import com.music.spotui.ui.theme.AppAccent
 
 private val Background: Color get() = com.music.spotui.ui.theme.AppBackground
-private val Subtle = Color(0xFFB3B3B3)
+private val Subtle: androidx.compose.ui.graphics.Color get() = AppMuted
 
 @Composable
 private fun ScreenHeader(title: String, navController: NavController) {
@@ -71,10 +76,10 @@ private fun ScreenHeader(title: String, navController: NavController) {
         Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
             contentDescription = stringResource(R.string.accessibility_navigate_back),
-            tint = Color.White,
-            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(20.dp)).clickable { navController.popBackStack() }.padding(8.dp),
+            tint = AppText,
+            modifier = Modifier.wideClickable(horizontal = 8.dp, vertical = 10.dp) { navController.popBackStack() }.size(40.dp).padding(8.dp),
         )
-        Text(title, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 22.sp, maxLines = 1,
+        Text(title, fontWeight = FontWeight.Bold, color = AppText, fontSize = 22.sp, maxLines = 1,
             overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 6.dp))
     }
 }
@@ -84,9 +89,9 @@ private fun Loading() = com.music.spotui.ui.components.SkeletonList(count = 7)
 
 @Composable
 private fun SectionTitle(text: String) =
-    Text(text, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp, 18.dp, 16.dp, 8.dp))
+    Text(text, color = AppText, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp, 18.dp, 16.dp, 8.dp))
 
-private data class ReleaseTile(val id: String, val name: String, val artists: String, val cover: String, val detail: String)
+internal data class ReleaseTile(val id: String, val name: String, val artists: String, val cover: String, val detail: String)
 
 /** "New releases": what the followed artists just released, then the latest albums Spotify features. */
 @OptIn(ExperimentalGlideComposeApi::class)
@@ -125,9 +130,9 @@ fun NewReleasesScreen(navController: NavController) {
                         Column(Modifier.clickable { navController.navigate(albumRoute(t.name, t.artists, t.id)) }) {
                             GlideImage(transition = CrossFade, model = t.cover, contentDescription = null, contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(6.dp)))
-                            Text(t.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, lineHeight = 16.sp, minLines = 2, maxLines = 2,
+                            Text(t.name, color = AppText, fontSize = 13.sp, fontWeight = FontWeight.Bold, lineHeight = 16.sp, minLines = 2, maxLines = 2,
                                 overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
-                            Text(t.detail.ifBlank { t.artists }, color = Color.Gray, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(t.detail.ifBlank { t.artists }, color = AppMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }
@@ -160,7 +165,7 @@ fun EpisodesScreen(navController: NavController) {
                         GlideImage(transition = CrossFade, model = e.coverUri, contentDescription = null, contentScale = ContentScale.Crop,
                             modifier = Modifier.size(56.dp).clip(RoundedCornerShape(6.dp)))
                         Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                            Text(e.title, color = Color.White, fontSize = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text(e.title, color = AppText, fontSize = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             Text(e.singer + " • " + formatMinutes(e.durationMs / 60_000L), color = Subtle, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                         }
                     }
@@ -190,21 +195,24 @@ fun RecapScreen(navController: NavController) {
         }
     }
     val recap = loaded ?: ListenHistory.Recap(0, 0, emptyMap(), emptyList(), emptyList(), emptyList())
+    // Spotify's ranking of the account first (the official "Listening stats"), then this phone's counter.
+    var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
     Column(Modifier.fillMaxSize().background(Background).statusBarsPadding()) {
         ScreenHeader(stringResource(R.string.recap_title), navController)
-        LazyColumn(contentPadding = PaddingValues(bottom = com.music.spotui.ui.components.bottomBarsSpace())) {
+        StatsTabs(tab) { tab = it }
+        if (tab == 0) SpotifyStatsTab(navController) else LazyColumn(contentPadding = PaddingValues(bottom = com.music.spotui.ui.components.bottomBarsSpace())) {
             item {
-                Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.padding(16.dp, 12.dp, 16.dp, 0.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     periods.forEachIndexed { i, (label, _) ->
                         FilterChip(selected = i == period, onClick = { period = i }, label = { Text(stringResource(label)) },
                             colors = FilterChipDefaults.filterChipColors(selectedContainerColor = AppAccent, selectedLabelColor = Color.Black,
-                                labelColor = Color.White, containerColor = Color(0xFF2A2A2A)))
+                                labelColor = AppText, containerColor = tone(0xFF2A2A2A)))
                     }
                 }
             }
             item {
                 Column(Modifier.padding(16.dp, 20.dp)) {
-                    Text(stringResource(R.string.recap_minutes, recap.minutes), color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.recap_minutes, recap.minutes), color = AppText, fontSize = 30.sp, fontWeight = FontWeight.Bold)
                     Text(stringResource(R.string.recap_listens, recap.listens), color = Subtle, fontSize = 14.sp)
                     Spacer(Modifier.height(10.dp))
                     val src = recap.bySource
@@ -213,6 +221,7 @@ fun RecapScreen(navController: NavController) {
                         color = Subtle, fontSize = 13.sp)
                 }
             }
+            item { WeeklyMinutesChart() }
             if (recap.listens == 0) item {
                 Text(stringResource(R.string.recap_empty), color = Subtle, fontSize = 14.sp, modifier = Modifier.padding(16.dp))
             }
@@ -226,7 +235,7 @@ fun RecapScreen(navController: NavController) {
                         GlideImage(transition = CrossFade, model = r.cover, contentDescription = null, contentScale = ContentScale.Crop,
                             modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)))
                         Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                            Text(r.name, color = Color.White, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(r.name, color = AppText, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(listOf(r.subtitle, stringResource(R.string.recap_plays, r.count)).filter { it.isNotBlank() }.joinToString(" • "),
                                 color = Subtle, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                         }

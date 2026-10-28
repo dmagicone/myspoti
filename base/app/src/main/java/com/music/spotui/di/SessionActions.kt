@@ -15,8 +15,8 @@ object SessionActions {
     /**
      * Signs out and drops everything tied to the account, so the next account on
      * this phone starts clean: prefs and in-memory caches, the saved screens,
-     * the listen history (the Recap), the SpotiFLAC download sessions, and the
-     * Web Player's cookies, Web storage and cache (in the host).
+     * the listen history (the Recap), and the Web Player's cookies, Web storage
+     * and cache (in the host).
      */
     fun logout(context: android.content.Context) {
         val app = context.applicationContext
@@ -30,6 +30,7 @@ object SessionActions {
         com.music.spotui.ui.screens.ContextViewModel.clearCache()
         com.music.spotui.data.api.Api.HomeCache.clear()
         com.music.spotui.data.api.Api.LikedCache.tracks = null
+        com.music.spotui.data.api.TopStats.clear()
         com.music.spotui.data.api.ProfileCache.clearSession()
         SongPlayer.clearSession()
         listOf("PlaybackState", "LibraryCache", "RecentItems", "LikedSongs",
@@ -37,7 +38,6 @@ object SessionActions {
             app.getSharedPreferences(name, android.content.Context.MODE_PRIVATE).edit().clear().apply()
         }
         com.music.spotui.data.local.ListenHistory.clear()
-        com.music.spotui.data.preferences.clearSpotiflacSessions(app)
         _signedOut.value = true
         MyspotiRuntime.host.logout()
     }

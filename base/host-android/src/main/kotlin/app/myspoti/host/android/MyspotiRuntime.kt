@@ -30,6 +30,7 @@ object MyspotiRuntime {
         if (isStarted) return
         val updater = app.myspoti.spotify.gql.GqlOpsUpdater(okhttp3.OkHttpClient(), java.io.File(context.filesDir, "spotify/gql-ops.json"))
         host = WebPlayerHost(context)
+        AudioModeWatch.install(context.applicationContext)
         spotify = SpotifyApi(host, scope, language = Locale.getDefault().language, ops = updater.load(), deviceId = clientDeviceId(context), userAgent = host.userAgent)
         spotify.bridge.logger = { line -> Logbook.log(line) }
         host.onPageLoaded = { scope.launch { spotify.onPageLoaded() } }
@@ -39,6 +40,7 @@ object MyspotiRuntime {
         // the player is not there to answer, and the "page not answering" reload threw the user
         // off the e-mail code step while they were away reading the code (reported, log seen).
         spotify.player.recoveryHeld = { host.licenseLimited() || host.loginRequired.value }
+        spotify.player.playbackHeld = { host.licenseLimited() }
         // Spotify limiting this client: stop asking (a paused player requests no licence).
         scope.launch {
             host.licenseLimitedUntil.collect { until ->
@@ -78,6 +80,7 @@ object MyspotiRuntime {
                         val attrs = a["attributes"] as? kotlinx.serialization.json.JsonObject
                         fun v(o: kotlinx.serialization.json.JsonObject?, k: String) = (o?.get(k) as? kotlinx.serialization.json.JsonPrimitive)?.content
                         Logbook.log("account: product=${v(a, "product")} country=${v(a, "country")} catalogue=${v(attrs, "catalogue")} onDemand=${v(attrs, "onDemand")} ads=${v(attrs, "ads")}")
+                        Logbook.fact("account", "product=${v(a, "product")} country=${v(a, "country")} catalogue=${v(attrs, "catalogue")} onDemand=${v(attrs, "onDemand")} ads=${v(attrs, "ads")}")
                     }.onFailure { planLogged = false }
                 }
                 val s = spotify.player.state.value

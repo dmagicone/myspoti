@@ -73,6 +73,8 @@ class SpotifyApi(
         val operations: Set<String> get() = currentOps.names
         suspend fun service(service: String, method: String, vararg args: JsonElement): JsonElement = bridge.service(service, method, *args)
         suspend fun get(url: String): JsonElement? = http.getJson(url)
+        /** Any method on a Spotify address ([app.myspoti.spotify.gql.SpotifyHttp.sendRaw]). */
+        suspend fun request(method: String, url: String, body: ByteArray?, headers: Map<String, String>) = http.sendRaw(method, url, body, headers)
     }
 
     init {

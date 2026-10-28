@@ -487,7 +487,30 @@ username is the account's own (`UserAPI.getUser().username`); the same call, wit
 username, is the owner's "Remove from playlist" in the members list. A public playlist stays in the
 library after leaving (followed, read-only); to join again a new invitation link is needed
 (`claimPermissions`). In the app: `Playlists.leave(uri)`, offered in the playlist's menu when
-`Playlist.canLeave`.
+`Playlist.canLeave`. Guests also get "Leave playlist" on their own row of the members sheet.
+
+## Managing members and stopping a collaboration (owner)
+
+The Web Player's "Shared with" list (`xpui-root-dialogs`, `permissions.*` strings) has a menu per
+member, gated by `capabilities.canAdministratePermissions`:
+
+| Menu entry | Call |
+|---|---|
+| "Make collaborator" (listener row) / "Make listener" (collaborator row) | page service `PlaylistPermissionsAPI.setMemberPermission(playlistUri, username, "CONTRIBUTOR" \| "VIEWER")` |
+| "Remove from playlist" | `PlaylistPermissionsAPI.removeMember(playlistUri, username)` |
+
+`setMemberPermission` first reads `GET /playlist/{id}/permission/members` (`{memberPermissions:{username:{revision}}}`)
+and fails when the user is not a member, then sends spclient `POST /playlist/{id}/permission/member/user/{username}`
+with `{revision, permissionLevel}`. In the app: `Playlists.setMemberCollaborator`, `Playlists.removeMember`
+(the members sheet; the menu shows on every non-owner row for the owner).
+
+The Web Player has **no "stop collaborating"** (its "Invite as collaborator" switch of the share dialog only
+adds the `pt` token to the copied link), and **no call to revoke an invitation link**: the only
+`permission-grant` calls in the bundles are `POST …/permission-grant` (create, `ttlMs` 7 days) and
+`POST …/permission-grant/token/{pt}/claim`. So `Playlists.stopCollaboration(uri)` is built from the member
+calls: each collaborator becomes a listener when the playlist is private (not listed on the profile) or is
+removed when it is public, then the base permission goes back to `BLOCKED` (private) / `VIEWER` (public).
+Links already shared are not revoked; the app's confirmation says so. Not tested on a real account.
 
 ## Blend ("Mix à plusieurs")
 

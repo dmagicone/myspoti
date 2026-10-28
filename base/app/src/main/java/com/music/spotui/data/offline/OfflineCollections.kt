@@ -8,11 +8,12 @@ import com.music.spotui.data.api.Response
 import com.music.spotui.data.entity.ContextPageModel
 import com.music.spotui.data.entity.SongsModel
 import com.music.spotui.di.Graph
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -42,7 +43,8 @@ object OfflineCollections {
     private const val SYNC_EVERY_MS = 6 * 3_600_000L
     private lateinit var file: File
     private val lock = Any()
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // A refresh that fails (no network, a page that cannot be read) is logged, never a crash of the app.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, e -> Log.w(TAG, "refresh failed: ${e.javaClass.simpleName}: ${e.message}") })
 
     val collections: SnapshotStateMap<String, OfflineCollection> = mutableStateMapOf()
     /** Songs downloaded on their own, kept whatever the lists do. */
@@ -77,7 +79,7 @@ object OfflineCollections {
     /** Download a song on its own. */
     fun downloadSong(song: SongsModel, quality: com.music.spotui.data.preferences.DownloadQuality? = null) {
         // Episodes have no track id and their own downloader (PodcastDownloader): sending one
-        // here would only be dropped, or worse, hit the lossless path.
+        // here would only be dropped, or worse, hit the track download path.
         if (song.spotifyTrackId.isBlank() || episodeKeyOf(song) != null) return
         synchronized(lock) { singles += song.spotifyTrackId }
         save()
@@ -98,11 +100,12 @@ object OfflineCollections {
 
     /** Download a list as a whole, and keep it in step from now on. */
     fun download(page: ContextPageModel, quality: com.music.spotui.data.preferences.DownloadQuality? = null) {
-        // An episode in a list is not a lossless track: it stays out of the collection, and the
+        // An episode in a list is not a track: it stays out of the collection, and the
         // list download never enqueues it (its own menu row is the way to download an episode).
         val ids = page.tracks.map { it.spotifyTrackId }.filter { it.isNotBlank() && !isEpisodeKey(it) }.toSet()
         collections[page.uri] = OfflineCollection(page.uri, page.type, page.name, ids, System.currentTimeMillis(), quality?.name.orEmpty())
         save()
+        keepPage(page)
         OfflineDownloader.enqueue(page.tracks, quality)
     }
 
@@ -110,6 +113,7 @@ object OfflineCollections {
     fun remove(uri: String) {
         val c = collections.remove(uri) ?: return
         save()
+        com.music.spotui.data.api.ScreenCache.dropOfflinePage(uri.substringAfterLast(':'))
         c.trackIds.filterNot { isKept(it) }.forEach { OfflineDownloader.remove(it) }
     }
 
@@ -133,10 +137,28 @@ object OfflineCollections {
         val gone = c.trackIds - ids
         collections[page.uri] = c.copy(name = page.name, trackIds = ids, syncedAt = System.currentTimeMillis())
         save()
+        keepPage(page)
         val missing = songs.filter { !OfflineStore.isDownloaded(it.spotifyTrackId) && OfflineStore.status[it.spotifyTrackId] == null }
         if (missing.isNotEmpty()) OfflineDownloader.enqueue(missing, com.music.spotui.data.preferences.DownloadQuality.saved(c.quality), auto = true)
         gone.filterNot { isKept(it) || isEpisodeKey(it) }.forEach { OfflineDownloader.remove(it) }
         if (missing.isNotEmpty() || gone.isNotEmpty()) Log.i(TAG, "${page.name}: +${missing.size} -${gone.size}")
+    }
+
+    /** The list's page as it is now, for opening it offline ([offlinePage]). */
+    private fun keepPage(page: ContextPageModel) {
+        if (page.complete) com.music.spotui.data.api.ScreenCache.offlinePage(page.uri.substringAfterLast(':')).write(page)
+    }
+
+    /**
+     * The downloaded list at [uri] as a page, for offline: the one kept when it was downloaded or
+     * last synced, else (a list downloaded before pages were kept) its downloaded songs. Blocks.
+     */
+    fun offlinePage(uri: String): ContextPageModel? {
+        val c = collections[uri] ?: return null
+        com.music.spotui.data.api.ScreenCache.offlinePage(uri.substringAfterLast(':')).read()?.let { return it }
+        val songs = c.trackIds.mapNotNull { id -> OfflineStore.tracks[id]?.takeIf { OfflineStore.isDownloaded(id) }?.let(OfflineStore::toSong) }
+        if (songs.isEmpty()) return null
+        return ContextPageModel(uri = uri, type = c.type, name = c.name, coverUri = songs.first().coverUri, tracks = songs)
     }
 
     /** Brings every downloaded list up to date (at start, at most every 6 hours, online only). */
@@ -148,8 +170,15 @@ object OfflineCollections {
             if (com.music.spotui.data.DataSaver.metered) { waitForWifi(); return@launch }
             val due = collections.values.filter { force || System.currentTimeMillis() - it.syncedAt > SYNC_EVERY_MS }
             for (c in due) {
-                val page = withTimeoutOrNull(60_000) { loadComplete(c) } ?: continue
-                withContext(Dispatchers.Main) { sync(page) }
+                // One list that fails does not stop the others.
+                try {
+                    val page = withTimeoutOrNull(60_000) { loadComplete(c) } ?: continue
+                    withContext(Dispatchers.Main) { sync(page) }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    Log.w(TAG, "${c.name} not refreshed: ${e.javaClass.simpleName}: ${e.message}")
+                }
             }
         }
     }
@@ -173,11 +202,12 @@ object OfflineCollections {
         val api = Graph.api
         val id = c.uri.substringAfterLast(":")
         val flow = when (c.type) {
-            "album" -> api.getAlbumPage(id)
+            "album" -> api.getAlbumPage(id, stored = false)
             "liked" -> api.getLikedPage()
             else -> api.getPlaylistPage(id)
         }
-        return (flow.first { it is Response.Error || (it is Response.Success && it.data.complete) } as? Response.Success)?.data
+        // A flow that ends without a complete page (the player never ready) is no page, not an error.
+        return (flow.firstOrNull { it is Response.Error || (it is Response.Success && it.data.complete) } as? Response.Success)?.data
     }
 
     private fun save() {

@@ -1,5 +1,9 @@
 package com.music.spotui.ui.screens
 
+import com.music.spotui.ui.components.wideClickable
+import com.music.spotui.ui.theme.headerTint
+import com.music.spotui.ui.theme.AppText
+
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -117,17 +121,17 @@ fun EpisodeScreen(navController: NavController, episodeId: String, fallbackName:
                 Column(
                     Modifier
                         .fillMaxWidth()
-                        .background(Brush.verticalGradient(listOf(Color(0xFF34302B), AppBackground)))
+                        .background(Brush.verticalGradient(listOf(headerTint(Color(0xFF34302B), 0f), AppBackground)))
                         .statusBarsPadding(),
                 ) {
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
                             .padding(12.dp)
+                            .wideClickable { navController.navigateUp() }
                             .size(40.dp)
                             .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.35f))
-                            .clickable { navController.navigateUp() },
+                            .background(Color.Black.copy(alpha = 0.35f)),
                     ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.accessibility_navigate_back), tint = Color.White)
                     }
@@ -146,7 +150,7 @@ fun EpisodeScreen(navController: NavController, episodeId: String, fallbackName:
                     Spacer(Modifier.height(18.dp))
                     Text(
                         text = episode?.title?.takeIf { it.isNotBlank() } ?: fallbackName,
-                        color = Color.White,
+                        color = AppText,
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 3,
@@ -172,7 +176,7 @@ fun EpisodeScreen(navController: NavController, episodeId: String, fallbackName:
                             Spacer(Modifier.width(8.dp))
                             Text(
                                 text = episode?.singer.orEmpty(),
-                                color = Color.White,
+                                color = AppText,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
@@ -184,7 +188,7 @@ fun EpisodeScreen(navController: NavController, episodeId: String, fallbackName:
                     val minutes = episodeMinutes(episode?.durationMs ?: 0)
                     Text(
                         text = if (date.isBlank()) minutes else "$date • $minutes",
-                        color = Color.White.copy(alpha = 0.65f),
+                        color = AppText.copy(alpha = 0.65f),
                         fontSize = 13.sp,
                         modifier = Modifier.padding(horizontal = 16.dp),
                     )
@@ -201,14 +205,14 @@ fun EpisodeScreen(navController: NavController, episodeId: String, fallbackName:
                         Icon(
                             Icons.Default.Share,
                             contentDescription = stringResource(R.string.a11y_share),
-                            tint = Color.White.copy(alpha = 0.85f),
+                            tint = AppText.copy(alpha = 0.85f),
                             modifier = Modifier.size(26.dp).pressable(0.9f) { episode?.let { shareEpisode(context, it) } },
                         )
                         Spacer(Modifier.width(20.dp))
                         Icon(
                             Icons.Default.MoreVert,
                             contentDescription = stringResource(R.string.episode_options),
-                            tint = Color.White.copy(alpha = 0.85f),
+                            tint = AppText.copy(alpha = 0.85f),
                             modifier = Modifier.size(26.dp).pressable(0.9f) { menuOpen = true },
                         )
                         Spacer(Modifier.weight(1f))
@@ -239,7 +243,7 @@ fun EpisodeScreen(navController: NavController, episodeId: String, fallbackName:
             if (vm.failed.value) item {
                 Text(
                     stringResource(R.string.episode_not_found),
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = AppText.copy(alpha = 0.7f),
                     fontSize = 14.sp,
                     modifier = Modifier.padding(16.dp),
                 )
@@ -261,7 +265,7 @@ fun EpisodeScreen(navController: NavController, episodeId: String, fallbackName:
                     Column(Modifier.fillMaxWidth().animateContentSize(androidx.compose.animation.core.tween(250)).padding(16.dp)) {
                         Text(
                             text = ep.description,
-                            color = Color.White.copy(alpha = 0.78f),
+                            color = AppText.copy(alpha = 0.78f),
                             fontSize = 14.sp,
                             maxLines = if (expanded) Int.MAX_VALUE else 4,
                             overflow = TextOverflow.Ellipsis,
@@ -269,7 +273,7 @@ fun EpisodeScreen(navController: NavController, episodeId: String, fallbackName:
                         Spacer(Modifier.height(6.dp))
                         Text(
                             text = stringResource(if (expanded) R.string.episode_show_less else R.string.episode_show_more),
-                            color = Color.White,
+                            color = AppText,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.clickable { expanded = !expanded },
@@ -299,7 +303,7 @@ private fun SaveEpisodeButton(saved: Boolean, onClick: () -> Unit) {
         Icon(
             Icons.Outlined.Add,
             contentDescription = stringResource(R.string.episode_save),
-            tint = Color.White.copy(alpha = 0.85f),
+            tint = AppText.copy(alpha = 0.85f),
             modifier = Modifier.size(28.dp).pressable(0.9f, onClick = onClick),
         )
     }

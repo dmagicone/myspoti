@@ -59,6 +59,8 @@ class ShowViewModel constructor(
         viewModelScope.launch(Dispatchers.IO) {
             repository.provideShowPage(showId).collect { response ->
                 _page.value = response
+                // A failed page may be loaded again (Try again, or opening it anew).
+                if (response is Response.Error) showKey = null
                 val loaded = (response as? Response.Success)?.data ?: return@collect
                 following.value = loaded.show.saved || SongPlayer.library["spotify:show:$showId"] == true
             }

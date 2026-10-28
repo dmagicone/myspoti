@@ -2,6 +2,22 @@
 
 Every change, release by release. The short version is in [CHANGELOG.md](../CHANGELOG.md), which the app and the GitHub releases show.
 
+## 2.1.0
+
+Stable release of the 2.0.2 betas (see [CHANGELOG.md](../CHANGELOG.md) for their notes), plus:
+
+- **Connect mirror for extension sources**: while an audio-source extension plays a Spotify song, the Web Player plays the same song muted at low quality as this phone's Connect device. Controls from other devices (official apps included) reach the local player through the track-playback state; transfers away and back, ads and page reloads are held; drift above 1.5 s is corrected. Setting in Playback (on by default, shown only with an audio-source extension).
+- **Per-look settings**: one accent colour per look (seeded from the old one); each look's settings list only what concerns it.
+- **Immersive pages**: album look-up, folders, local playlists, extensions store / detail / extension page, podcast episode player.
+- **Immersive shuffle**: the list's Shuffle pill starts the list shuffled, then cycles shuffle → smart shuffle → off while it plays; the player's shuffle does the same.
+- **Search**: a song played from search is played alone, without the list that last registered it (Liked Songs), so Spotify's autoplay follows.
+- **Radios** (Classic): the playing-from header opens only real Liked Songs links; the song title falls back to the queue's album, then the track's album, then a name search.
+- **Taps**: `wideClickable` (touch bounds expansion) on back buttons; profile buttons take the space around them; the Immersive top bars stop taps from reaching the page without cancelling their own buttons; Library grid feeds the bars' blur.
+- **Ads**: DoubleClick's media CDN `s0.2mdn.net` blocked (from coldMEW/Hush, GPL-3.0); ads found by content type and ad ids; a playing muted ad is skipped before any reload; a reloaded page stays muted until a song plays.
+- **Data and performance**: Liked Songs read in full once a day, album pages kept on storage, playlist songs reused for 5 min, search debounce and cache, lyrics memory and disk caches with background prefetch on unmetered networks, Glide disk cache at 150 MB with one shared 128 px decode, scrubber read in the draw phase.
+- **Extensions API**: optional `attest` action (per-extension Android Keystore key with attestation), see docs/extensions/API.md section 10.
+- **Release hygiene**: freeze watch only in beta and debug builds, no query strings in WebView log lines, a stable build fails without a signing key.
+
 ## 2.0.1
 
 - **402 `COMMAND_FAILED` on every play** (free accounts: Xiaomi Redmi 13 / Indonesia, Samsung A32 / Belarus, issue #55): the same accounts play in Spotui, which sends the Connect commands from the page itself, while Myspoti relays them through OkHttp. A relayed play or transfer answered 402 is now sent once more with the page's own `fetch`; if that one is accepted, the page's commands keep going that way, and only while something plays (checked 10 s later: a command sent from the page can be acknowledged and never delivered). Both refused: the refusal steps run as before. The diagnostic logs the retry's status and whether the page's way was kept.

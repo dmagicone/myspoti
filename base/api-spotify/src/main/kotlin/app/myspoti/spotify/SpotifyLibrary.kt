@@ -10,6 +10,7 @@ import app.myspoti.api.Page
 import app.myspoti.api.Playlist
 import app.myspoti.api.PlaylistAccess
 import app.myspoti.api.PlaylistMember
+import app.myspoti.api.PlaylistMerge
 import app.myspoti.api.RowAdder
 import app.myspoti.api.PlaylistSort
 import app.myspoti.api.Playlists
@@ -309,8 +310,36 @@ class SpotifyPlaylists(private val gql: Gql, private val bridge: Bridge, private
         bridge.service("PlaylistPermissionsAPI", "getMembers", JsonPrimitive(uri)).list("members").mapNotNull { m ->
             val username = m.str("user.username") ?: return@mapNotNull null
             PlaylistMember(username, m.str("user.displayName") ?: username,
-                m.list("user.images").firstNotNullOfOrNull { it.str("url") }, m.bool("isOwner") == true)
+                m.list("user.images").firstNotNullOfOrNull { it.str("url") }, m.bool("isOwner") == true,
+                isCollaborator = m.str("permissionLevel") == "CONTRIBUTOR")
         }.sortedByDescending { it.isOwner }
+
+    /**
+     * The members menu's "Remove as collaborator" / "Make collaborator": the page's
+     * `setMemberPermission(uri, username, level)` (spclient `POST /playlist/{id}/permission/member/user/{username}`,
+     * `{revision, permissionLevel}`; the page reads the member's revision itself first).
+     */
+    override suspend fun setMemberCollaborator(uri: Uri, username: String, collaborator: Boolean) {
+        bridge.service("PlaylistPermissionsAPI", "setMemberPermission", JsonPrimitive(uri), JsonPrimitive(username),
+            JsonPrimitive(if (collaborator) "CONTRIBUTOR" else "VIEWER"))
+    }
+
+    /** The members menu's "Remove from playlist": `removeMember(uri, username)` (`DELETE …/permission/member/user/{username}`). */
+    override suspend fun removeMember(uri: Uri, username: String) {
+        bridge.service("PlaylistPermissionsAPI", "removeMember", JsonPrimitive(uri), JsonPrimitive(username))
+    }
+
+    /**
+     * Members first (a failure leaves the playlist collaborative, so the owner can retry), then the
+     * base permission. Public (listed on the profile): collaborators are removed; private: they become listeners.
+     */
+    override suspend fun stopCollaboration(uri: Uri) {
+        val public = published(uri)
+        members(uri).filter { it.isCollaborator && !it.isOwner }.forEach {
+            if (public) removeMember(uri, it.username) else setMemberCollaborator(uri, it.username, false)
+        }
+        setAccess(uri, if (public) PlaylistAccess.PUBLIC else PlaylistAccess.PRIVATE)
+    }
 
     /**
      * The page's "Leave playlist" (menu entry gated by `canCancelMembership`, then its dialog):
@@ -358,11 +387,14 @@ class SpotifyPlaylists(private val gql: Gql, private val bridge: Bridge, private
         return all.sortedFor(sort, descending)
     }
 
+    /** At most [PlaylistMerge.CHUNK] songs a request, each at the bottom, so a whole album or playlist keeps its order. */
     override suspend fun addTracks(uri: Uri, trackUris: List<Uri>) {
-        gql.query("addToPlaylist", vars(
-            "playlistItemUris" to trackUris, "playlistUri" to uri,
-            "newPosition" to mapOf("moveType" to "BOTTOM_OF_PLAYLIST", "fromUid" to null),
-        ))
+        for (chunk in trackUris.chunked(PlaylistMerge.CHUNK)) {
+            gql.query("addToPlaylist", vars(
+                "playlistItemUris" to chunk, "playlistUri" to uri,
+                "newPosition" to mapOf("moveType" to "BOTTOM_OF_PLAYLIST", "fromUid" to null),
+            ))
+        }
     }
 
     override suspend fun removeTracks(uri: Uri, uids: List<String>) {

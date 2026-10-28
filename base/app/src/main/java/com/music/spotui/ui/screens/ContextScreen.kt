@@ -1,5 +1,13 @@
 package com.music.spotui.ui.screens
 
+import com.music.spotui.ui.components.wideClickable
+import com.music.spotui.ui.theme.AppDestructive
+import com.music.spotui.ui.theme.tone
+import com.music.spotui.ui.theme.AppText
+import com.music.spotui.ui.theme.headerTint
+
+import com.music.spotui.ui.theme.AppMuted
+
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.ArrowDownward
@@ -8,6 +16,7 @@ import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.async
 import com.music.spotui.ui.components.SkeletonKind
+import com.music.spotui.ui.components.animatedRow
 import com.music.spotui.ui.components.pressable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -118,6 +127,9 @@ class ContextViewModel(
         private val inflight = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Deferred<Unit>>()
         private val prefetchScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
 
+        /** A playlist up to this long is prefetched whole, longer ones by their first page. */
+        private const val WHOLE_PLAYLIST_MAX = 200
+
         /** Pages likely to be opened next (top of the library, home shortcuts), loaded quietly. */
         fun prefetchSoon(pages: List<Pair<String, String>>) {
             prefetchScope.launch {
@@ -143,13 +155,24 @@ class ContextViewModel(
                         "liked" -> api.getLikedPage()
                         else -> api.getPlaylistPage(id)
                     }
-                    val first = flow.first { it !is Response.Loading }
-                    if (first is Response.Success) {
-                        recent[key] = first
+                    // The first page of tracks; a playlist of 200 songs or fewer is waited for whole (as
+                    // PagePrefetch does), so it opens complete rather than cut after its first 100.
+                    var first: Response<ContextPageModel>? = null
+                    val settled = flow.first { r ->
+                        if (r is Response.Loading) return@first false
+                        if (first == null) first = r
+                        r !is Response.Success || type != "playlist" || r.data.complete || r.data.tracks.size > WHOLE_PLAYLIST_MAX
+                    }
+                    val shown = (settled as? Response.Success)?.takeIf { it.data.complete } ?: first
+                    if (shown is Response.Success) {
+                        recent[key] = shown
                         // The hearts are known before the page opens.
-                        val p = first.data
+                        val p = shown.data
                         if (p.type != "liked" && p.type != "liked-artist") SongPlayer.libraryContains(
                             p.tracks.mapNotNull { s -> s.spotifyTrackId.takeIf { it.isNotBlank() }?.let { "spotify:track:$it" } } + p.uri)
+                        // The header's cover (the big one) is on storage before the page draws it.
+                        if (p.coverUri.startsWith("http") && !com.music.spotui.data.DataSaver.metered)
+                            runCatching { com.bumptech.glide.Glide.with(Graph.app).downloadOnly().load(p.coverUri).submit() }
                     }
                 } catch (t: kotlinx.coroutines.CancellationException) {
                     throw t
@@ -215,16 +238,22 @@ class ContextViewModel(
         reload()
     }
 
+    /** Set by [reload]: the next load skips the short-lived caches (whole Liked list, playlist songs). */
+    private var fresh = false
+
     /** After an edit (name, cover, description): the page from the server again. */
     fun reload() {
         val k = key ?: return
         recent.remove(k)
         key = null
+        fresh = true
         // The likes, the members and who added each song are read again with the new list (a
         // song just added showed no face on a collaborative playlist).
         savedChecked = 0
         load(lastType, lastId)
     }
+
+    private var warmedFor = ""
 
     fun load(type: String, id: String) {
         lastType = type; lastId = id
@@ -242,14 +271,19 @@ class ContextViewModel(
             }
             // Fetched ahead (PagePrefetch) or opened before, on storage: shown whole at once.
             var fromDisk = false
+            // A list downloaded as a whole opens offline: its kept page, the network refreshing it behind.
+            val offlineUri = when (type) { "album", "playlist" -> "spotify:$type:$id"; "liked" -> "spotify:collection:tracks"; else -> null }
+            if (_page.value !is Response.Success && offlineUri != null)
+                com.music.spotui.data.offline.OfflineCollections.offlinePage(offlineUri)?.let { fromDisk = true; _page.value = Response.Success(it) }
             if (_page.value !is Response.Success && type == "playlist")
                 com.music.spotui.data.api.ScreenCache.page(id).read()?.let { fromDisk = true; _page.value = Response.Success(it) }
+            val force = fresh.also { fresh = false }
             val flow = when (type) {
                 "album" -> api.getAlbumPage(id)
-                "liked" -> api.getLikedPage()
+                "liked" -> api.getLikedPage(full = force)
                 // id: "<artist id>|<artist name>"
                 "liked-artist" -> api.getLikedByArtistPage(id.substringBefore('|'), id.substringAfter('|', ""))
-                else -> api.getPlaylistPage(id)
+                else -> api.getPlaylistPage(id, force = force)
             }
             // Liked Songs: a like or unlike anywhere puts the list right at once.
             if (type == "liked") {
@@ -292,6 +326,8 @@ class ContextViewModel(
                 if (r is Response.Success) {
                     recent[key!!] = r
                     val p = r.data
+                    // Its first songs are made ready, so a tap plays at once (an audio-source extension).
+                    if (warmedFor != p.uri) { warmedFor = p.uri; viewModelScope.launch { runCatching { com.music.spotui.extensions.ExtensionAudio.warm(p.tracks) } } }
                     if (type == "playlist" && p.complete) com.music.spotui.data.api.PagePrefetch.refreshed(id, p)
                     // Check saved state on the first page and again once complete.
                     if ((savedChecked == 0 && p.tracks.isNotEmpty()) || (p.complete && savedChecked < 2)) {
@@ -343,6 +379,28 @@ class ContextViewModel(
         // Said on the page instead of leaving the user wondering where the + went.
         collabLocked.value = p.type == "playlist" && !p.isBlend && !editableContext.value && withContext(Dispatchers.IO) {
             runCatching { MyspotiRuntime.api.playlists.access(p.uri) == app.myspoti.api.PlaylistAccess.COLLABORATIVE }.getOrDefault(false)
+        }
+    }
+
+    /**
+     * Owner, from the "Shared with" list: a member becomes a collaborator or a listener, or leaves
+     * the playlist ([collaborator] null). The list answers at once; a refusal puts back what Spotify has.
+     */
+    fun changeMember(p: ContextPageModel, m: app.myspoti.api.PlaylistMember, collaborator: Boolean?, onDone: (Boolean) -> Unit) {
+        val before = members.value
+        members.value = if (collaborator == null) before.filter { it.username != m.username }
+        else before.map { if (it.username == m.username) it.copy(isCollaborator = collaborator) else it }
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    if (collaborator == null) MyspotiRuntime.api.playlists.removeMember(p.uri, m.username)
+                    else MyspotiRuntime.api.playlists.setMemberCollaborator(p.uri, m.username, collaborator)
+                }.isSuccess
+            }
+            if (!ok) members.value = withContext(Dispatchers.IO) {
+                runCatching { MyspotiRuntime.api.playlists.members(p.uri) }.getOrDefault(before)
+            }
+            onDone(ok)
         }
     }
 
@@ -403,9 +461,22 @@ class ContextViewModel(
             val at = local.indexOfFirst { it.trackId == song.spotifyTrackId }.coerceAtLeast(0)
             if (limited && local.size < p.tracks.size)
                 android.widget.Toast.makeText(app, app.getString(R.string.offline_only_downloaded, local.size, p.tracks.size), android.widget.Toast.LENGTH_SHORT).show()
-            com.music.spotui.di.LocalPlayer.play(local.map(store::toLocalTrack), at, shuffle = state.shuffle.value, context = p.name)
+            com.music.spotui.di.LocalPlayer.play(local.map(store::toLocalTrack), at, shuffle = state.shuffle.value, context = p.name, contextUri = p.uri)
             return
         }
+        // An extension that gives songs' audio (audio-source): the list plays in the local
+        // player from there, like downloads; it has nothing for the picked song, Spotify plays.
+        if (!limited && com.music.spotui.extensions.Extensions.hasAudioSource()) {
+            val shuffle = state.shuffle.value
+            SongPlayer.playThroughExtensions(song.spotifyTrackId, song, p.name, { playOnSpotify(p, song, sort) }) { isLatest, _ ->
+                com.music.spotui.extensions.ExtensionAudio.playList(sort.apply(p.tracks), song, p.name, shuffle, p.uri, isLatest)
+            }
+            return
+        }
+        playOnSpotify(p, song, sort)
+    }
+
+    private fun playOnSpotify(p: ContextPageModel, song: SongsModel, sort: TrackOrder) {
         state.updateQueue(p.tracks)
         // B26: keep the list's own name — the player header falls back to it when Spotify's
         // context label comes back blank (it then showed the album's name).
@@ -415,7 +486,8 @@ class ContextViewModel(
         // artist's liked songs are a part of Liked Songs: always given, so only they play.
         val order = if (sort.isCustom && p.type != "liked-artist") null else sort.apply(p.tracks).map { "spotify:track:${it.spotifyTrackId}" }
         if (order != null) state.updateQueue(sort.apply(p.tracks))
-        SongPlayer.playSong(song.url, contextUri = p.uri, order = order)
+        // The audio-source extensions were asked already (or the phone is offline): Spotify plays.
+        SongPlayer.playSong(song.url, contextUri = p.uri, order = order, askExtensions = false)
         state.updateSongState(song.coverUri, song.title, song.singer, true, song.id, 0, song.album)
     }
 }
@@ -430,11 +502,10 @@ fun ContextScreen(navController: NavController, type: String, id: String) {
     Box(modifier = Modifier.fillMaxSize().background(PageBackground)) {
         when (val r = resp) {
             is Response.Loading -> Loader(SkeletonKind.Header)
-            is Response.Error -> Text(
-                r.error,
-                color = Color.White,
-                modifier = Modifier.align(Alignment.Center).padding(24.dp),
-            )
+            is Response.Error -> com.music.spotui.ui.components.ErrorRetry(
+                stringResource(R.string.page_load_failed),
+                Modifier.align(Alignment.Center),
+            ) { vm.reload() }
             is Response.Success -> ContextContent(navController, vm, r.data)
         }
     }
@@ -453,7 +524,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
     val saved by vm.savedUris
     val contextSaved by vm.contextSaved
 
-    var tintTarget by remember { mutableStateOf(Palette.cachedSecond(p.coverUri) ?: Color(0xFF3A3A3A)) }
+    var tintTarget by remember { mutableStateOf(Palette.cachedSecond(p.coverUri) ?: tone(0xFF3A3A3A)) }
     LaunchedEffect(p.coverUri) {
         if (p.coverUri.isNotBlank()) Palette().extractSecondColorFromCoverUrl(context, p.coverUri) { tintTarget = it }
     }
@@ -466,7 +537,16 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
     var sort by remember(p.uri) { mutableStateOf(TrackOrder.load(ctx, p.uri)) }
     var askRemoveDownloads by remember { mutableStateOf(false) }
     var playlistMenu by remember { mutableStateOf(false) }
+    var albumMenu by remember { mutableStateOf(false) }
     var addingSongs by remember { mutableStateOf(false) }
+    var leaveAsk by remember { mutableStateOf(false) }
+    // The profile id comes once per session (and is no Compose state): `name` is set just before it,
+    // so reading it here redraws the page when the id is there.
+    LaunchedEffect(Unit) { com.music.spotui.data.api.ProfileCache.ensure(context) }
+    val ownPlaylist = com.music.spotui.data.api.ProfileCache.let { cache ->
+        cache.name
+        cache.id?.let { id -> p.ownerUri == "spotify:user:$id" } == true
+    }
     // A11: confirmations (and their Undo) float above the list, not inside a menu that closes.
     val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -498,7 +578,25 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
         }
     }
 
+    if (leaveAsk) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { leaveAsk = false },
+        containerColor = tone(0xFF282828),
+        title = { Text(stringResource(R.string.playlist_leave), color = AppText) },
+        text = { Text(stringResource(R.string.playlist_leave_confirm, p.name), color = AppMuted) },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = {
+                leaveAsk = false
+                // As from the playlist menu: the page closes now; a refusal says so and the library is read again.
+                com.music.spotui.data.api.LibraryEdits.run(context, null,
+                    write = { MyspotiRuntime.api.playlists.leave(p.uri) },
+                    onDone = { ok -> if (ok) com.music.spotui.data.api.LibraryEdits.reloadSoon() })
+                navController.navigateUp()
+            }) { Text(stringResource(R.string.playlist_leave_button), color = AppDestructive) }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = { leaveAsk = false }) { Text(stringResource(R.string.cancel), color = AppText) } },
+    )
     if (addingSongs) com.music.spotui.ui.components.AddSongsScreen(p) { added -> addingSongs = false; if (added) vm.reload() }
+    if (albumMenu) com.music.spotui.ui.components.AlbumOptionsSheet(p.uri, p.name) { albumMenu = false }
     if (playlistMenu) com.music.spotui.ui.components.PlaylistOptionsSheet(
         page = p,
         onAddSongs = if (p.type == "playlist" && vm.editableContext.value && !p.isBlend) ({ addingSongs = true }) else null,
@@ -510,9 +608,9 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
     )
     if (askRemoveDownloads) androidx.compose.material3.AlertDialog(
         onDismissRequest = { askRemoveDownloads = false },
-        containerColor = Color(0xFF282828),
-        title = { Text(stringResource(R.string.playlist_entity_remove_download_dialog_title), color = Color.White) },
-        text = { Text(stringResource(R.string.playlist_entity_remove_download_dialog_description), color = Color(0xFFB3B3B3)) },
+        containerColor = tone(0xFF282828),
+        title = { Text(stringResource(R.string.playlist_entity_remove_download_dialog_title), color = AppText) },
+        text = { Text(stringResource(R.string.playlist_entity_remove_download_dialog_description), color = AppMuted) },
         confirmButton = {
             androidx.compose.material3.TextButton(onClick = {
                 askRemoveDownloads = false
@@ -522,7 +620,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
         },
         dismissButton = {
             androidx.compose.material3.TextButton(onClick = { askRemoveDownloads = false }) {
-                Text(stringResource(R.string.add_to_playlist_button_cancel), color = Color.White)
+                Text(stringResource(R.string.add_to_playlist_button_cancel), color = AppText)
             }
         },
     )
@@ -599,7 +697,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
             androidx.compose.material3.pulltorefresh.PullToRefreshDefaults.Indicator(
                 state = pullState, isRefreshing = refreshing,
                 modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding(),
-                containerColor = Color(0xFF282828), color = SpotifyGreen,
+                containerColor = tone(0xFF282828), color = SpotifyGreen,
             )
         },
     ) {
@@ -608,19 +706,19 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(lerp(tint, Color.Black, 0.25f), PageBackground)))
+                    .background(Brush.verticalGradient(listOf(headerTint(tint, 0.25f), PageBackground)))
                     .statusBarsPadding()
             ) {
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
                         .padding(12.dp)
+                        .wideClickable { navController.navigateUp() }
                         .size(40.dp)
                         .clip(CircleShape)
                         .background(Color.Black.copy(alpha = 0.35f))
-                        .clickable { navController.navigateUp() }
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.accessibility_navigate_back), tint = Color.White)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.accessibility_navigate_back), tint = AppText)
                 }
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth()) {
                     if (p.type == "liked" || p.type == "liked-artist") LikedCover(Modifier.fillMaxWidth(0.66f).aspectRatio(1f).shadow(16.dp, RoundedCornerShape(4.dp))) else
@@ -643,18 +741,28 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                     com.music.spotui.ui.components.FitText(p.name, fontSize = 26.sp, minSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 2)
                     if (p.description.isNotBlank()) {
                         Spacer(Modifier.height(8.dp))
-                        Text(p.description, color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                        Text(p.description, color = AppText.copy(alpha = 0.7f), fontSize = 14.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
                     }
                     val crew = vm.members.value
                     if (crew.size > 1) {
                         // Collaborative: everyone who adds to it, as the official app shows them.
                         Spacer(Modifier.height(10.dp))
                         var showMembers by remember { mutableStateOf(false) }
-                        if (showMembers) MembersSheet(crew, navController) { showMembers = false }
+                        if (showMembers) MembersSheet(
+                            members = crew, navController = navController,
+                            // The owner manages everyone; a guest only has "Leave playlist" on their own row.
+                            ownPlaylist = ownPlaylist, me = com.music.spotui.data.api.ProfileCache.id, canLeave = p.canLeave,
+                            onChange = { m, collaborator ->
+                                vm.changeMember(p, m, collaborator) { ok ->
+                                    if (!ok) android.widget.Toast.makeText(context, R.string.playlist_change_refused, android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onLeave = { showMembers = false; leaveAsk = true },
+                        ) { showMembers = false }
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.pressable(0.96f) { showMembers = true }) {
                             Box(Modifier.width((24 + 16 * (crew.size.coerceAtMost(4) - 1)).dp).height(24.dp)) {
                                 crew.take(4).forEachIndexed { n, m ->
-                                    Box(Modifier.padding(start = (16 * n).dp).size(24.dp).clip(CircleShape).background(Color(0xFF121212)).padding(1.dp)) {
+                                    Box(Modifier.padding(start = (16 * n).dp).size(24.dp).clip(CircleShape).background(tone(0xFF121212)).padding(1.dp)) {
                                         com.music.spotui.ui.components.ProfileAvatar(m.imageUrl, m.name, 22.dp)
                                     }
                                 }
@@ -663,7 +771,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                             Text(
                                 if (crew.size <= 2) crew.joinToString(", ") { it.name }
                                 else stringResource(R.string.playlist_members_more, crew.first().name, crew.size - 1),
-                                color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                color = AppText, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             )
                         }
                     } else if (p.ownerName.isNotBlank()) {
@@ -688,7 +796,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                                 )
                                 Spacer(Modifier.width(8.dp))
                             }
-                            Text(p.ownerName, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(p.ownerName, color = AppText, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                     if (p.metaLine.isNotBlank() || p.explicit) {
@@ -698,7 +806,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                                 ExplicitBadge()
                                 Spacer(Modifier.width(6.dp))
                             }
-                            Text(p.metaLine, color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+                            Text(p.metaLine, color = AppText.copy(alpha = 0.7f), fontSize = 13.sp)
                         }
                     }
                 }
@@ -713,13 +821,14 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                     if (p.type == "playlist" && vm.editableContext.value && !p.isBlend) {
                         Box(
                             contentAlignment = Alignment.Center,
-                            modifier = Modifier.size(36.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.12f)).pressable(0.9f) { addingSongs = true },
+                            modifier = Modifier.size(36.dp).clip(CircleShape).background(AppText.copy(alpha = 0.12f)).pressable(0.9f) { addingSongs = true },
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_songs_title), tint = Color.White, modifier = Modifier.size(24.dp))
+                            Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_songs_title), tint = AppText, modifier = Modifier.size(24.dp))
                         }
                         Spacer(Modifier.width(20.dp))
                     }
-                    if (p.type != "liked") {
+                    // Saving is for other people's playlists: the user's own are in the library already.
+                    if (p.type != "liked" && !(p.type == "playlist" && ownPlaylist)) {
                         LikeButton(liked = SongPlayer.library[p.uri] ?: contextSaved, size = 28.dp) { vm.toggleContextSaved(p) }
                         Spacer(Modifier.width(20.dp))
                     }
@@ -747,10 +856,10 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                             }
                         }
                     }
-                    if (p.type == "playlist") {
+                    if (p.type == "playlist" || p.type == "album") {
                         Spacer(Modifier.width(16.dp))
-                        Icon(Icons.Default.MoreVert, stringResource(R.string.content_description_context_menu), tint = Color.White.copy(alpha = 0.8f),
-                            modifier = Modifier.size(26.dp).pressable(0.9f) { playlistMenu = true })
+                        Icon(Icons.Default.MoreVert, stringResource(R.string.content_description_context_menu), tint = AppText.copy(alpha = 0.8f),
+                            modifier = Modifier.size(26.dp).pressable(0.9f) { if (p.type == "playlist") playlistMenu = true else albumMenu = true })
                     }
                     // Sorting stays in reach in the header (the search field above the songs is folded).
                     if (findable && all.isNotEmpty()) {
@@ -763,7 +872,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                     Icon(
                         painter = painterResource(id = R.drawable.ic_player_shuffle),
                         contentDescription = stringResource(if (smart) R.string.smart_shuffle_title else R.string.play_mode_item_shuffle_title),
-                        tint = if (shuffle || smart) SpotifyGreen else Color.White.copy(alpha = 0.8f),
+                        tint = if (shuffle || smart) SpotifyGreen else AppText.copy(alpha = 0.8f),
                         modifier = Modifier
                             .size(26.dp)
                             .drawWithContent {
@@ -823,11 +932,11 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp)).background(Color.White.copy(alpha = 0.06f)).padding(12.dp),
+                    .clip(RoundedCornerShape(10.dp)).background(AppText.copy(alpha = 0.06f)).padding(12.dp),
             ) {
-                Icon(Icons.Outlined.Group, contentDescription = null, tint = Color(0xFFB3B3B3), modifier = Modifier.size(20.dp))
+                Icon(Icons.Outlined.Group, contentDescription = null, tint = AppMuted, modifier = Modifier.size(20.dp))
                 Text(stringResource(R.string.playlist_collab_locked, p.ownerName.ifBlank { stringResource(R.string.playlist_collab_owner) }),
-                    color = Color(0xFFB3B3B3), fontSize = 13.sp, modifier = Modifier.padding(start = 10.dp))
+                    color = AppMuted, fontSize = 13.sp, modifier = Modifier.padding(start = 10.dp))
             }
         }
         if (p.isBlend) item(key = "blend") {
@@ -851,7 +960,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
         }
         val (listed, keys) = shown
         itemsIndexed(listed, key = { i, _ -> keys[i] }) { _, song ->
-            com.music.spotui.ui.components.SwipeToQueue(song) { TrackRow(
+            com.music.spotui.ui.components.SwipeToQueue(song, animatedRow()) { TrackRow(
                 song = song,
                 showCover = p.type != "album",
                 isCurrent = song.id == currentSongId,
@@ -870,7 +979,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
             val additions = com.music.spotui.data.local.LocalPlaylists.additions[playlistId].orEmpty()
             if (additions.isNotEmpty()) {
                 item {
-                    Text(stringResource(R.string.local_added_section), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                    Text(stringResource(R.string.local_added_section), color = AppText, fontSize = 18.sp, fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(16.dp, 20.dp, 16.dp, 4.dp))
                 }
                 localItems(additions, p.name) { com.music.spotui.data.local.LocalPlaylists.removeFromSpotify(playlistId, it.key) }
@@ -899,18 +1008,18 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer { alpha = barAlpha.value }
-            .background(lerp(tint, Color.Black, 0.45f))
+            .background(headerTint(tint, 0.45f))
             .statusBarsPadding()
             .height(56.dp),
     ) {
         Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier.padding(horizontal = 8.dp).size(40.dp).clip(CircleShape).clickable { navController.navigateUp() },
+            modifier = Modifier.padding(horizontal = 8.dp).wideClickable(horizontal = 8.dp, vertical = 8.dp) { navController.navigateUp() }.size(40.dp),
         ) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.accessibility_navigate_back), tint = Color.White)
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.accessibility_navigate_back), tint = AppText)
         }
         // Centred, as on the artist page.
-        Text(p.name, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        Text(p.name, color = AppText, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.weight(1f).padding(end = 56.dp))
     }
     // Opened from a collaborative-playlist invitation (…?pt=): the playlist is joined from here.
@@ -923,10 +1032,10 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
             .align(Alignment.BottomCenter)
             .padding(start = 16.dp, end = 16.dp, bottom = com.music.spotui.ui.components.bottomBarsSpace())
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF282828))
+            .background(tone(0xFF282828))
             .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
     ) {
-        Text(stringResource(R.string.playlist_invite_banner), color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f).padding(end = 12.dp))
+        Text(stringResource(R.string.playlist_invite_banner), color = AppText, fontSize = 14.sp, modifier = Modifier.weight(1f).padding(end = 12.dp))
         androidx.compose.material3.Button(
             enabled = !joining,
             colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = SpotifyGreen, contentColor = Color.Black),
@@ -951,8 +1060,8 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
     ) { data ->
         androidx.compose.material3.Snackbar(
             snackbarData = data,
-            containerColor = Color(0xFF282828),
-            contentColor = Color.White,
+            containerColor = tone(0xFF282828),
+            contentColor = AppText,
             actionContentColor = SpotifyGreen,
         )
     }
@@ -997,12 +1106,12 @@ private fun androidx.compose.foundation.lazy.LazyListScope.recommendedItems(vm: 
         LaunchedEffect(p.uri) { vm.loadRecs(p) }
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(16.dp, 28.dp, 8.dp, 4.dp)) {
             Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.recommended_songs), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.recommended_songs), color = AppText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Text(stringResource(if (p.tracks.isEmpty()) R.string.recommended_songs_from_name else R.string.recommended_songs_from_songs),
-                    color = Color(0xFFB3B3B3), fontSize = 13.sp)
+                    color = AppMuted, fontSize = 13.sp)
             }
             androidx.compose.material3.TextButton(onClick = { vm.loadRecs(p, refresh = true) }) {
-                Text(stringResource(R.string.recommended_songs_refresh), color = Color.White, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.recommended_songs_refresh), color = AppText, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -1012,7 +1121,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.recommendedItems(vm: 
         RecommendedRow(
             song,
             isCurrent = song.id == currentSongId,
-            onPlay = { SongPlayer.playSong(song.url, context) },
+            onPlay = { SongPlayer.playSong(song.url, context, songs = listOf(song)) },
             onAdd = {
                 vm.takeRec(p, song)
                 com.music.spotui.data.api.SpotifySync.addTrackToPlaylist(context, p.uri.substringAfterLast(':'), song.spotifyTrackId) { ok ->
@@ -1036,11 +1145,11 @@ private fun RecommendedRow(song: SongsModel, isCurrent: Boolean, onPlay: () -> U
             modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)))
         Column(Modifier.weight(1f).padding(start = 12.dp, end = 8.dp)) {
             // The song playing is green, as in the playlist above.
-            Text(song.title, color = if (isCurrent) SpotifyGreen else Color.White, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(song.singer, color = Color(0xFFB3B3B3), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(song.title, color = if (isCurrent) SpotifyGreen else AppText, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(song.singer, color = AppMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         androidx.compose.material3.IconButton(onClick = onAdd) {
-            Icon(androidx.compose.material.icons.Icons.Outlined.AddCircleOutline, contentDescription = stringResource(R.string.recommended_songs_add), tint = Color.White)
+            Icon(androidx.compose.material.icons.Icons.Outlined.AddCircleOutline, contentDescription = stringResource(R.string.recommended_songs_add), tint = AppText)
         }
     }
 }
@@ -1048,10 +1157,20 @@ private fun RecommendedRow(song: SongsModel, isCurrent: Boolean, onPlay: () -> U
 /** The people of a collaborative playlist: owner first, then collaborators; a tap opens a profile. */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun MembersSheet(members: List<app.myspoti.api.PlaylistMember>, navController: NavController, onDismiss: () -> Unit) {
-    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF282828)) {
+internal fun MembersSheet(
+    members: List<app.myspoti.api.PlaylistMember>,
+    navController: NavController,
+    ownPlaylist: Boolean,
+    me: String?,
+    canLeave: Boolean,
+    /** Owner: [collaborator] true/false changes the member's level, null removes the member. */
+    onChange: (app.myspoti.api.PlaylistMember, Boolean?) -> Unit,
+    onLeave: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    com.music.spotui.ui.components.LookSheet(onDismissRequest = onDismiss, containerColor = tone(0xFF282828)) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
-            Text(stringResource(R.string.playlist_members_title), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold,
+            Text(stringResource(R.string.playlist_members_title), color = AppText, fontSize = 18.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(20.dp, 0.dp, 20.dp, 12.dp))
             members.forEach { m ->
                 Row(
@@ -1062,8 +1181,31 @@ private fun MembersSheet(members: List<app.myspoti.api.PlaylistMember>, navContr
                 ) {
                     com.music.spotui.ui.components.ProfileAvatar(m.imageUrl, m.name, 44.dp)
                     Column(Modifier.weight(1f).padding(start = 14.dp)) {
-                        Text(m.name, color = Color.White, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(stringResource(if (m.isOwner) R.string.playlist_member_owner else R.string.playlist_member_collab), color = Color(0xFFB3B3B3), fontSize = 13.sp)
+                        Text(m.name, color = AppText, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(stringResource(when {
+                            m.isOwner -> R.string.playlist_member_owner
+                            m.isCollaborator -> R.string.playlist_member_collab
+                            else -> R.string.playlist_member_listener
+                        }), color = AppMuted, fontSize = 13.sp)
+                    }
+                    // As the Web Player's "Shared with": the owner's menu per member, "Leave playlist" on a guest's own row.
+                    val ownRow = canLeave && me != null && m.username == me
+                    if (!m.isOwner && (ownPlaylist || ownRow)) {
+                        var open by remember { mutableStateOf(false) }
+                        Box {
+                            Icon(Icons.Default.MoreVert, contentDescription = null, tint = AppText,
+                                modifier = Modifier.size(40.dp).clip(CircleShape).clickable { open = true }.padding(8.dp))
+                            androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = tone(0xFF282828)) {
+                                @Composable fun item(label: Int, action: () -> Unit) = androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text(stringResource(label), color = AppText) },
+                                    onClick = { open = false; action() })
+                                if (ownPlaylist) {
+                                    if (m.isCollaborator) item(R.string.playlist_member_remove_collab) { onChange(m, false) }
+                                    else item(R.string.playlist_member_make_collab) { onChange(m, true) }
+                                    item(R.string.playlist_member_remove) { onChange(m, null) }
+                                } else item(R.string.playlist_leave) { onLeave() }
+                            }
+                        }
                     }
                 }
             }
@@ -1128,7 +1270,7 @@ private fun TrackRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 song.title,
-                color = if (isCurrent) SpotifyGreen else Color.White,
+                color = if (isCurrent) SpotifyGreen else AppText,
                 fontSize = 16.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -1142,7 +1284,7 @@ private fun TrackRow(
                     ExplicitBadge()
                     Spacer(Modifier.width(6.dp))
                 }
-                Text(song.singer, color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(song.singer, color = AppText.copy(alpha = 0.7f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         // Collaborative playlist: who added this song.
@@ -1162,7 +1304,7 @@ private fun TrackRow(
         Icon(
             Icons.Default.MoreVert,
             contentDescription = stringResource(R.string.content_description_context_menu),
-            tint = Color.White.copy(alpha = 0.7f),
+            tint = AppText.copy(alpha = 0.7f),
             modifier = Modifier.pressable(0.96f) { onMore() }
                 .size(24.dp)
                 ,
@@ -1179,7 +1321,7 @@ private fun LikedCover(modifier: Modifier) {
             .clip(RoundedCornerShape(4.dp))
             .background(Brush.linearGradient(listOf(Color(0xFF450AF5), Color(0xFF8E8EE5), Color(0xFFC4EFD9)))),
     ) {
-        Icon(Icons.Default.Favorite, contentDescription = null, tint = Color.White, modifier = Modifier.fillMaxWidth(0.4f).aspectRatio(1f))
+        Icon(Icons.Default.Favorite, contentDescription = null, tint = AppText, modifier = Modifier.fillMaxWidth(0.4f).aspectRatio(1f))
     }
 }
 
@@ -1258,7 +1400,9 @@ object SmartShuffle {
         val startSong = mixed.first()
         // Turned on from the player: the song playing goes on where it is, not from its start.
         val position = fromPositionMs?.takeIf { first != null && it > 0 }
-        SongPlayer.playSong(startSong.url, contextUri = p.uri, order = mixed.map { "spotify:track:${it.spotifyTrackId}" }, positionMs = position)
+        // The song playing going on where it is stays on Spotify; a new play asks the audio-source extensions first.
+        SongPlayer.playSong(startSong.url, contextUri = p.uri, order = mixed.map { "spotify:track:${it.spotifyTrackId}" }, positionMs = position,
+            songs = mixed, askExtensions = position == null)
         state.updateSongState(startSong.coverUri, startSong.title, startSong.singer, true, startSong.id, 0, startSong.album)
     }
 
@@ -1342,14 +1486,14 @@ private fun TrackSortButton(sort: TrackOrder, onSort: (TrackOrder) -> Unit) {
     Box {
         Icon(androidx.compose.material.icons.Icons.Default.SwapVert,
             contentDescription = stringResource(R.string.filter_and_sort_sort_section_title),
-            tint = if (sort.isCustom) Color.White.copy(alpha = 0.8f) else SpotifyGreen,
+            tint = if (sort.isCustom) AppText.copy(alpha = 0.8f) else SpotifyGreen,
             modifier = Modifier.size(26.dp).pressable(0.9f) { open = true })
-        androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Color(0xFF282828)) {
-            Text(stringResource(R.string.filter_and_sort_sort_section_title), color = Color(0xFFB3B3B3), fontSize = 13.sp,
+        androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = tone(0xFF282828)) {
+            Text(stringResource(R.string.filter_and_sort_sort_section_title), color = AppMuted, fontSize = 13.sp,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
             TrackSort.entries.forEach { option ->
                 androidx.compose.material3.DropdownMenuItem(
-                    text = { Text(stringResource(option.label), color = if (option == sort.sort) SpotifyGreen else Color.White) },
+                    text = { Text(stringResource(option.label), color = if (option == sort.sort) SpotifyGreen else AppText) },
                     trailingIcon = if (option == sort.sort) { {
                         Icon(if (sort.reversed) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
                             contentDescription = null, tint = SpotifyGreen, modifier = Modifier.size(18.dp))
@@ -1373,7 +1517,7 @@ private fun SimilarAlbums(navController: NavController, firstTrackId: String, al
     }
     if (albums.isEmpty()) return
     Column(Modifier.padding(top = 24.dp)) {
-        Text(stringResource(R.string.more_like_this), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+        Text(stringResource(R.string.more_like_this), color = AppText, fontSize = 20.sp, fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         androidx.compose.foundation.lazy.LazyRow(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
@@ -1387,8 +1531,8 @@ private fun SimilarAlbums(navController: NavController, firstTrackId: String, al
                 }) {
                     GlideImage(transition = CrossFade, model = a.images.maxByOrNull { it.width ?: 0 }?.url, contentDescription = null, contentScale = ContentScale.Crop,
                         modifier = Modifier.size(140.dp).clip(RoundedCornerShape(4.dp)))
-                    Text(a.name, color = Color.White, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
-                    Text(artists, color = Color(0xFFB3B3B3), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(a.name, color = AppText, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
+                    Text(artists, color = AppMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }

@@ -1,5 +1,9 @@
 package com.music.spotui.ui.components
 
+import com.music.spotui.ui.theme.tone
+import com.music.spotui.ui.theme.AppText
+import com.music.spotui.ui.theme.AppMuted
+
 import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -95,22 +99,22 @@ private fun CompactLine(info: BlendInfo, onClick: () -> Unit) {
         // Overlapping faces, as Spotify shows a Blend's members.
         Box(Modifier.width((28 + 18 * (members.size.coerceAtMost(4) - 1).coerceAtLeast(0)).dp).height(28.dp)) {
             members.take(4).forEachIndexed { n, m ->
-                Box(Modifier.padding(start = (18 * n).dp).size(28.dp).clip(CircleShape).background(Color(0xFF121212)).padding(1.5.dp)) {
+                Box(Modifier.padding(start = (18 * n).dp).size(28.dp).clip(CircleShape).background(tone(0xFF121212)).padding(1.5.dp)) {
                     ProfileAvatar(m.imageUrl, m.name, 25.dp)
                 }
             }
         }
         Column(Modifier.weight(1f).padding(start = 10.dp, end = 8.dp)) {
-            Text(info.story?.title ?: info.group?.title ?: stringResource(R.string.blend_title), color = Color.White, fontSize = 14.sp,
+            Text(info.story?.title ?: info.group?.title ?: stringResource(R.string.blend_title), color = AppText, fontSize = 14.sp,
                 fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (members.isNotEmpty()) Text(members.joinToString(", ") { it.name }, color = Color(0xFFB3B3B3), fontSize = 12.sp,
+            if (members.isNotEmpty()) Text(members.joinToString(", ") { it.name }, color = AppMuted, fontSize = 12.sp,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         info.group?.link?.let { link ->
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.size(36.dp).clip(CircleShape).background(Color(0xFF2A2A2A)).clickable { BlendInfo.share(context, link) },
-            ) { Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.blend_invite_more), tint = Color.White, modifier = Modifier.size(20.dp)) }
+                modifier = Modifier.size(36.dp).clip(CircleShape).background(tone(0xFF2A2A2A)).clickable { BlendInfo.share(context, link) },
+            ) { Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.blend_invite_more), tint = AppText, modifier = Modifier.size(20.dp)) }
         }
     }
 }
@@ -148,9 +152,9 @@ private fun color(hex: String?, fallback: Color): Color =
 @OptIn(ExperimentalGlideComposeApi::class)
 @Composable
 private fun StoryCard(story: BlendStory) {
-    val background = color(story.background, Color(0xFF2A2A2A))
-    val title = color(story.titleColor, Color.White)
-    val text = color(story.textColor, Color(0xFFB3B3B3))
+    val background = color(story.background, tone(0xFF2A2A2A))
+    val title = color(story.titleColor, AppText)
+    val text = color(story.textColor, AppMuted)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -180,14 +184,14 @@ private fun Members(group: BlendGroup) {
     val context = LocalContext.current
     Text(
         group.title ?: stringResource(R.string.blend_members),
-        color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold,
+        color = AppText, fontSize = 16.sp, fontWeight = FontWeight.Bold,
         modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 10.dp),
     )
     LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         items(group.members, key = { it.username }) { m ->
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(72.dp)) {
                 ProfileAvatar(m.imageUrl, m.name, 64.dp)
-                Text(m.name, color = Color.White, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                Text(m.name, color = AppText, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center, modifier = Modifier.padding(top = 6.dp))
             }
         }
@@ -197,10 +201,10 @@ private fun Members(group: BlendGroup) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.width(72.dp).clip(RoundedCornerShape(8.dp)).clickable { BlendInfo.share(context, link) },
                 ) {
-                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(64.dp).clip(CircleShape).background(Color(0xFF2A2A2A))) {
-                        Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(64.dp).clip(CircleShape).background(tone(0xFF2A2A2A))) {
+                        Icon(Icons.Filled.Add, contentDescription = null, tint = AppText, modifier = Modifier.size(28.dp))
                     }
-                    Text(group.inviteLabel ?: stringResource(R.string.blend_invite_more), color = Color(0xFFB3B3B3), fontSize = 12.sp,
+                    Text(group.inviteLabel ?: stringResource(R.string.blend_invite_more), color = AppMuted, fontSize = 12.sp,
                         maxLines = 2, textAlign = TextAlign.Center, lineHeight = 14.sp, modifier = Modifier.padding(top = 6.dp))
                 }
             }

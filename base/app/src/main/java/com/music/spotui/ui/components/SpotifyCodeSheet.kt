@@ -1,5 +1,10 @@
 package com.music.spotui.ui.components
 
+import app.myspoti.host.android.Covers as HostCovers
+import com.music.spotui.ui.theme.tone
+import com.music.spotui.ui.theme.AppText
+import com.music.spotui.ui.theme.AppMuted
+
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -101,7 +106,7 @@ object SpotifyCode {
             runCatching {
                 val app = context.applicationContext
                 val code = Glide.with(app).asBitmap().load(imageUrl(target.uri, background, barsOn(background))).submit().get()
-                val cover = target.coverUri.takeIf { it.isNotBlank() }?.let { runCatching { Glide.with(app).asBitmap().load(it).submit(840, 840).get() }.getOrNull() }
+                val cover = target.coverUri.takeIf { it.isNotBlank() }?.let { runCatching { Glide.with(app).asBitmap().load(HostCovers.large(it)).submit(840, 840).get() }.getOrNull() }
                 val w = 1080; val side = 840; val pad = 120
                 val codeH = side * code.height / code.width.coerceAtLeast(1)
                 val h = pad + (if (cover != null) side + 60 else 0) + codeH + pad
@@ -147,8 +152,8 @@ fun SpotifyCodeSheet(target: ShareTarget, onDismiss: () -> Unit) {
         if (target.coverUri.isNotBlank()) Palette().extractSecondColorFromCoverUrl(context, target.coverUri) { background = it }
     }
     val bars = SpotifyCode.barsOn(background)
-    val text = if (bars == "black") Color.Black else Color.White
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = Color(0xFF121212)) {
+    val text = if (bars == "black") Color.Black else AppText
+    com.music.spotui.ui.components.LookSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = tone(0xFF121212)) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             // The card: cover, name, and the code under them, all on the cover's colour.
             Column(
@@ -156,7 +161,7 @@ fun SpotifyCodeSheet(target: ShareTarget, onDismiss: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(0.82f).clip(RoundedCornerShape(16.dp)).background(background).padding(20.dp),
             ) {
                 if (target.coverUri.isNotBlank()) GlideImage(
-                    model = target.coverUri, contentDescription = null, contentScale = ContentScale.Crop, transition = CrossFade,
+                    model = app.myspoti.host.android.Covers.large(target.coverUri), contentDescription = null, contentScale = ContentScale.Crop, transition = CrossFade,
                     modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(6.dp)),
                 )
                 Text(target.title, color = text, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis,
@@ -170,11 +175,11 @@ fun SpotifyCodeSheet(target: ShareTarget, onDismiss: () -> Unit) {
                     modifier = Modifier.padding(top = 14.dp).fillMaxWidth().aspectRatio(4f),
                 )
             }
-            Text(stringResource(R.string.spotify_code_hint), color = Color(0xFFB3B3B3), fontSize = 13.sp, textAlign = TextAlign.Center,
+            Text(stringResource(R.string.spotify_code_hint), color = AppMuted, fontSize = 13.sp, textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 12.dp))
             // The link itself, under the code.
-            Text(target.link, color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 14.dp).fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0xFF2A2A2A))
+            Text(target.link, color = AppText.copy(alpha = 0.85f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 14.dp).fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(tone(0xFF2A2A2A))
                     .clickable { copy(context, target.link) }.padding(horizontal = 14.dp, vertical = 12.dp))
             Row(Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 16.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
                 ShareAction(Icons.Outlined.ContentCopy, stringResource(R.string.copy_link)) { copy(context, target.link); onDismiss() }
@@ -198,10 +203,10 @@ private fun copy(context: Context, link: String) {
 @Composable
 private fun ShareAction(icon: ImageVector, label: String, onClick: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(96.dp).clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).padding(vertical = 6.dp)) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(52.dp).clip(CircleShape).background(Color(0xFF2A2A2A))) {
-            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(52.dp).clip(CircleShape).background(tone(0xFF2A2A2A))) {
+            Icon(icon, contentDescription = null, tint = AppText, modifier = Modifier.size(24.dp))
         }
         Spacer(Modifier.height(6.dp))
-        Text(label, color = Color.White, fontSize = 12.sp, textAlign = TextAlign.Center, maxLines = 2)
+        Text(label, color = AppText, fontSize = 12.sp, textAlign = TextAlign.Center, maxLines = 2)
     }
 }

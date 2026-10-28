@@ -184,7 +184,11 @@ data class BlendMember(val username: String, val name: String, val imageUrl: Str
 data class RowAdder(val rowUid: String, val trackUri: String, val username: String)
 
 /** Someone who can change a playlist: its owner, or a collaborator who joined it. */
-data class PlaylistMember(val username: String, val name: String, val imageUrl: String?, val isOwner: Boolean)
+data class PlaylistMember(
+    val username: String, val name: String, val imageUrl: String?, val isOwner: Boolean,
+    /** Permission level CONTRIBUTOR (adds and removes songs); otherwise a listener (VIEWER). */
+    val isCollaborator: Boolean = !isOwner,
+)
 
 /** Where an invitation stands for the signed-in account. */
 enum class BlendInvitationState {

@@ -1,5 +1,10 @@
 package com.music.spotui.ui.screens
 
+import com.music.spotui.ui.theme.AppDestructive
+import com.music.spotui.ui.theme.AppText
+import com.music.spotui.ui.theme.AppMuted
+import com.music.spotui.ui.theme.tone
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -68,6 +74,9 @@ fun ProfileScreen(navController: NavController, userId: String, userName: String
     var profile by remember(userId) { mutableStateOf<UserProfile?>(null) }
     var failed by remember(userId) { mutableStateOf(false) }
     var following by remember(userId) { mutableStateOf<Boolean?>(null) }
+    var blocked by remember(userId) { mutableStateOf<Boolean?>(null) }
+    var blockAsk by remember(userId) { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
     val me = com.music.spotui.data.api.ProfileCache.id == userId
     val scope = rememberCoroutineScope()
     var attempt by remember(userId) { mutableStateOf(0) }
@@ -76,17 +85,68 @@ fun ProfileScreen(navController: NavController, userId: String, userName: String
         runCatching { MyspotiRuntime.api.users.profile(uri) }
             .onSuccess { profile = it }.onFailure { failed = true }
         if (!me) following = runCatching { MyspotiRuntime.api.users.isFollowing(listOf(uri)).single() }.getOrNull()
+        if (!me) blocked = runCatching { MyspotiRuntime.api.users.isBlocked(uri) }.getOrNull()
     }
     val p = profile
+    if (blockAsk) {
+        val name = p?.name ?: userName.ifEmpty { userId }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { blockAsk = false },
+            containerColor = tone(0xFF282828),
+            title = { Text(stringResource(R.string.profile_block_title, name), color = AppText) },
+            text = { Text(stringResource(R.string.profile_block_confirm, name), color = AppMuted) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    blockAsk = false
+                    com.music.spotui.di.Haptics.confirm()
+                    scope.launch {
+                        runCatching { MyspotiRuntime.api.users.blockUser(uri) }
+                            .onSuccess { blocked = true; following = false }
+                            .onFailure { android.widget.Toast.makeText(context, R.string.profile_block_failed, android.widget.Toast.LENGTH_SHORT).show() }
+                    }
+                }) { Text(stringResource(R.string.profile_block), color = AppDestructive) }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { blockAsk = false }) { Text(stringResource(R.string.cancel), color = AppText) } },
+        )
+    }
     LazyColumn(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = com.music.spotui.ui.components.bottomBarsSpace()),
         modifier = Modifier.fillMaxSize().background(AppBackground).statusBarsPadding(),
     ) {
         item {
-            Icon(
-                Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.accessibility_navigate_back), tint = Color.White,
-                modifier = Modifier.pressable(0.96f) { navController.navigateUp() }.padding(16.dp).size(26.dp),
-            )
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.accessibility_navigate_back), tint = AppText,
+                    modifier = Modifier.pressable(0.96f) { navController.navigateUp() }.padding(16.dp).size(26.dp),
+                )
+                Spacer(Modifier.weight(1f))
+                // The Web Player's profile menu: Block / Unblock (only once the block state is known).
+                val b = blocked
+                if (!me && b != null) {
+                    var menu by remember { mutableStateOf(false) }
+                    Box {
+                        Icon(
+                            Icons.Default.MoreVert, stringResource(R.string.profile_more_options), tint = AppText,
+                            modifier = Modifier.pressable(0.96f) { menu = true }.padding(16.dp).size(26.dp),
+                        )
+                        androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = tone(0xFF282828)) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text(stringResource(if (b) R.string.profile_unblock else R.string.profile_block), color = AppText) },
+                                onClick = {
+                                    menu = false
+                                    if (b) scope.launch {
+                                        blocked = false
+                                        runCatching { MyspotiRuntime.api.users.unblockUser(uri) }.onFailure {
+                                            blocked = true
+                                            android.widget.Toast.makeText(context, R.string.profile_block_failed, android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    } else blockAsk = true
+                                },
+                            )
+                        }
+                    }
+                }
+            }
         }
         item {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(16.dp)) {
@@ -100,28 +160,53 @@ fun ProfileScreen(navController: NavController, userId: String, userName: String
                 if (p != null) {
                     Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         p.followers?.let {
-                            Text(pluralStringResource(R.plurals.profile_followers, it, it), color = Color(0xFFB3B3B3), fontSize = 14.sp,
+                            Text(pluralStringResource(R.plurals.profile_followers, it, it), color = AppMuted, fontSize = 14.sp,
                                 modifier = Modifier.clip(RoundedCornerShape(6.dp))
                                     .pressable(0.96f) { navController.navigate(followListRoute(userId, followers = true)) }
                                     .padding(horizontal = 6.dp, vertical = 4.dp))
                         }
-                        if (p.followers != null && p.following != null) Text("•", color = Color(0xFFB3B3B3), fontSize = 14.sp)
+                        if (p.followers != null && p.following != null) Text("•", color = AppMuted, fontSize = 14.sp)
                         p.following?.let {
-                            Text(stringResource(R.string.profile_following_count, it), color = Color(0xFFB3B3B3), fontSize = 14.sp,
+                            Text(stringResource(R.string.profile_following_count, it), color = AppMuted, fontSize = 14.sp,
                                 modifier = Modifier.clip(RoundedCornerShape(6.dp))
                                     .pressable(0.96f) { navController.navigate(followListRoute(userId, followers = false)) }
                                     .padding(horizontal = 6.dp, vertical = 4.dp))
                         }
                     }
                 }
+                // Your own profile leads to your listening stats, like the official app's.
+                if (me) {
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        stringResource(R.string.stats_listening_stats),
+                        color = AppText, fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.clip(RoundedCornerShape(50))
+                            .border(1.dp, AppMuted, RoundedCornerShape(50))
+                            .pressable(0.96f) { navController.navigate(com.music.spotui.ui.navigation.Routes.Recap.route) }
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        stringResource(R.string.extensions_title),
+                        color = AppText, fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.clip(RoundedCornerShape(50))
+                            .border(1.dp, AppMuted, RoundedCornerShape(50))
+                            .pressable(0.96f) { navController.navigate(com.music.spotui.ui.navigation.Routes.Extensions.route) }
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                    )
+                }
+                if (blocked == true) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(stringResource(R.string.profile_blocked), color = AppMuted, fontSize = 14.sp)
+                }
                 val f = following
-                if (!me && f != null) {
+                if (!me && f != null && blocked != true) {
                     Spacer(Modifier.height(14.dp))
                     Text(
                         stringResource(if (f) R.string.curation_button_following_state_text else R.string.curation_button_follow_state_text),
-                        color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                        color = AppText, fontSize = 14.sp, fontWeight = FontWeight.Bold,
                         modifier = Modifier.clip(RoundedCornerShape(50))
-                            .border(1.dp, if (f) Color.White else Color(0xFF878787), RoundedCornerShape(50))
+                            .border(1.dp, if (f) AppText else AppMuted, RoundedCornerShape(50))
                             .pressable(0.96f) {
                                 com.music.spotui.di.Haptics.confirm()
                                 following = !f
@@ -143,7 +228,7 @@ fun ProfileScreen(navController: NavController, userId: String, userName: String
             }
             p.publicPlaylists.isNotEmpty() -> {
                 item {
-                    Text(stringResource(R.string.profile_public_playlists), color = Color.White, fontSize = 20.sp,
+                    Text(stringResource(R.string.profile_public_playlists), color = AppText, fontSize = 20.sp,
                         fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp, 12.dp))
                 }
                 items(p.publicPlaylists, key = { it.uri }) { pl ->
@@ -162,10 +247,10 @@ fun ProfileScreen(navController: NavController, userId: String, userName: String
                         )
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(pl.name, color = Color.White, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(pl.name, color = AppText, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             pl.followers?.let {
                                 Text(pluralStringResource(R.plurals.profile_followers, it.toInt(), it.toInt()),
-                                    color = Color(0xFFB3B3B3), fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                    color = AppMuted, fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                             }
                         }
                     }
