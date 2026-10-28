@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/AA1.jpg">  <img src="docs/screenshots/AA.jpg" alt="Myspoti: Android Auto" width="50%">
+  <img src="docs/screenshots/AA1.jpg" width="50%">  <img src="docs/screenshots/AA.jpg" alt="Myspoti: Android Auto" width="50%">
 </p>
 
 <p align="center">
