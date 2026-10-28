@@ -14,6 +14,8 @@
   <img src="docs/screenshots/AAA.jpg" alt="Myspoti: Android Auto" width="100%">
 </p>
 
+
+
 <p align="center">
   <a href="https://github.com/dmagicone/myspoti/releases/latest"><b>⬇ Download the latest APK</b></a>
 </p>
